@@ -1,0 +1,57 @@
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { User } from '../../users/entities/user.entity';
+import { Resource } from '../../resources/entities/resource.entity';
+import { ReservationStatus } from '../../../common/enums/reservation-status.enum';
+
+@Entity('reservations')
+export class Reservation {
+  @PrimaryGeneratedColumn('uuid')
+  id: string;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'user_id' })
+  user: User;
+
+  @Column({ name: 'user_id' })
+  userId: string;
+
+  @ManyToOne(() => Resource)
+  @JoinColumn({ name: 'resource_id' })
+  resource: Resource;
+
+  @Column({ name: 'resource_id' })
+  resourceId: string;
+
+  @Column({ name: 'reservation_date', type: 'date' })
+  reservationDate: string;
+  
+  // En ranchos estos dos campos son null porque es dia completo
+  @Column({ name: 'start_time', type: 'time', nullable: true })
+  startTime: string;
+
+  @Column({ name: 'end_time', type: 'time', nullable: true })
+  endTime: string;
+
+  @Column({ 
+    type: 'enum',
+    enum: ReservationStatus,
+    default: ReservationStatus.PENDING_PAYMENT,
+  })
+  status: ReservationStatus;
+
+  // Null en ranchos de Florencia porque pagan el dia que llegan
+  @Column({ name: 'payment_date', type: 'timestamptz', nullable: true })
+  paytmentDeadline: Date;
+
+  @Column({ name: 'confirmed_at', type: 'timestamptz', nullable: true })
+  confimedAt: Date;
+
+  @Column({ name: 'rejeccction_reason', nullable: true, type: 'text' })
+  rejectionReason: string;
+
+  @CreateDateColumn({ name: 'ccreated_at' })
+  createdAt: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
+}
