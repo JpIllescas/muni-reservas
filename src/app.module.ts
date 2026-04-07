@@ -7,6 +7,7 @@ import { User } from './modules/users/entities/user.entity';
 import { UsersModule } from './modules/users/users.module';
 import { OtpCode } from './modules/auth/entities/otp-code.entity';
 import { Resource } from './modules/resources/entities/resource.entity';
+import { ResourcesModule } from './modules/resources/resources.module';
 import { ResourceSchedule } from './modules/resources/entities/resource-schedule.entity';
 import { Reservation } from './modules/reservations/entities/reservation.entity';
 import { ReservationLog } from './modules/reservations/entities/reservation-log.entity';
@@ -50,6 +51,7 @@ import { AuthModule } from './modules/auth/auth.module';
 
     AuthModule,
     UsersModule,
+    ResourcesModule,
   ],
 })
 export class AppModule {}
