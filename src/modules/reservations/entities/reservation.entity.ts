@@ -44,7 +44,7 @@ export class Reservation {
   paytmentDeadline: Date;
 
   @Column({ name: 'confirmed_at', type: 'timestamptz', nullable: true })
-  confimedAt: Date;
+  confirmedAt: Date;
 
   @Column({ name: 'rejeccction_reason', nullable: true, type: 'text' })
   rejectionReason: string;
