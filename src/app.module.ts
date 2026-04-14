@@ -44,7 +44,7 @@ import { AuthModule } from './modules/auth/auth.module';
           SystemConfig,
         ],
         synchronize: true, // Solo para el desarrollo, en produccion usar migracion.
-        loggin: true,
+        logging: true,
       }),
       inject: [ConfigService],
     }),

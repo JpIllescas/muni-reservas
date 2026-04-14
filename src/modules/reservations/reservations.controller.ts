@@ -10,7 +10,7 @@ import { Role } from '../../common/enums/role.enum';
 import { ReservationStatus } from '../../common/enums/reservation-status.enum';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Controller('reservation')
+@Controller('reservations')
 export class ReservationsController {
   constructor(private readonly reservationsService: ReservationsService) {}
 
@@ -51,7 +51,7 @@ export class ReservationsController {
   }
 
   // PATCH /api/reservations/:id/cancel - el ciudadadno cancela su reserva
-  @Patch('id/cancel')
+  @Patch(':id/cancel')
   cancel(
     @Param('id') id: string,
     @CurrentUser() user: any,

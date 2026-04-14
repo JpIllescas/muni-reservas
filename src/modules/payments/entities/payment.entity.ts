@@ -11,6 +11,7 @@ export class Payment {
 
  @ManyToOne(() => Reservation)
  @JoinColumn({ name: 'reservation_id' })
+ reservation: Reservation;
  
  @Column({ name: 'reservation_id' })
  reservationId: string;

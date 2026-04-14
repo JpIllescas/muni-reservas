@@ -27,10 +27,10 @@ export class Reservation {
   
   // En ranchos estos dos campos son null porque es dia completo
   @Column({ name: 'start_time', type: 'time', nullable: true })
-  startTime: string;
+  startTime: string | null;
 
   @Column({ name: 'end_time', type: 'time', nullable: true })
-  endTime: string;
+  endTime: string | null;
 
   @Column({ 
     type: 'enum',
@@ -41,15 +41,15 @@ export class Reservation {
 
   // Null en ranchos de Florencia porque pagan el dia que llegan
   @Column({ name: 'payment_date', type: 'timestamptz', nullable: true })
-  paytmentDeadline: Date;
+  paymentDeadline: Date | null;
 
   @Column({ name: 'confirmed_at', type: 'timestamptz', nullable: true })
-  confirmedAt: Date;
+  confirmedAt: Date | null;
 
-  @Column({ name: 'rejeccction_reason', nullable: true, type: 'text' })
-  rejectionReason: string;
+  @Column({ name: 'rejection_reason', nullable: true, type: 'text' })
+  rejectionReason: string | null;
 
-  @CreateDateColumn({ name: 'ccreated_at' })
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })

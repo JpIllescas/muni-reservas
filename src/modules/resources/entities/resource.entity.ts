@@ -34,7 +34,7 @@ export class Resource {
   isActive: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
-  ccreatedAt: Date;
+  createdAt: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;

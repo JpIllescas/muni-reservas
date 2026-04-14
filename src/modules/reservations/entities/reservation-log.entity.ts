@@ -16,7 +16,7 @@ export class ReservationLog {
   reservationId: string;
 
   @Column({ name: 'from_status', type: 'enum', enum: ReservationStatus, nullable: true })
-  fromStatus: ReservationStatus;
+  fromStatus: ReservationStatus | null;
 
   @Column({ name: 'to_status', type: 'enum', enum: ReservationStatus })
   toStatus: ReservationStatus;
@@ -27,10 +27,10 @@ export class ReservationLog {
   changedBy: User;
 
   @Column({ name: 'changed_by', nullable: true })
-  changedById: string;
+  changedById: string | null;
 
   @Column({ nullable: true, type: 'text' })
-  reason: string;
+  reason: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
