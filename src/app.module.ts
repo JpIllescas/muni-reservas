@@ -19,6 +19,7 @@ import { ResourceException } from './modules/resources/entities/resource-excepti
 //Modulos
 import { AuthModule } from './modules/auth/auth.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -56,6 +57,7 @@ import { ReservationsModule } from './modules/reservations/reservations.module';
     UsersModule,
     ResourcesModule,
     ReservationsModule,
+    PaymentsModule,
   ],
 })
 export class AppModule {}
