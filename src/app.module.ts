@@ -14,10 +14,11 @@ import { ReservationLog } from './modules/reservations/entities/reservation-log.
 import { Payment } from './modules/payments/entities/payment.entity';
 import { AuditLog } from './modules/audit/entities/audit-log.entity';
 import { SystemConfig } from './modules/config/entities/system-config.entity';
+import { ResourceException } from './modules/resources/entities/resource-exception.entity'
 
-//Moduloa
+//Modulos
 import { AuthModule } from './modules/auth/auth.module';
-
+import { ReservationsModule } from './modules/reservations/reservations.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -37,6 +38,7 @@ import { AuthModule } from './modules/auth/auth.module';
           OtpCode,
           Resource,
           ResourceSchedule,
+          ResourceException,
           Reservation,
           ReservationLog,
           Payment,
@@ -49,9 +51,11 @@ import { AuthModule } from './modules/auth/auth.module';
       inject: [ConfigService],
     }),
 
+    // imports
     AuthModule,
     UsersModule,
     ResourcesModule,
+    ReservationsModule,
   ],
 })
 export class AppModule {}

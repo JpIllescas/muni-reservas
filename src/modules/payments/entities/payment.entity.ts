@@ -31,6 +31,9 @@ export class Payment {
  @Column({ name: 'voucher_size_bytes', type: 'bigint', nullable: true })
  voucherSizeBytes: number;
 
+ @Column({ name: 'transaction_reference', nullable: true})
+ transactionReference: string;
+
  @Column({ name: 'submitted_at', type: 'timestamptz', nullable: true })
  submittedAt: Date;
 

@@ -3,6 +3,10 @@
 /node_modules
 /build
 /.env
+/AGENTS.md
+/CONTEXT.md
+/skills-lock.json
+/.agents
 
 # Logs
 logs
