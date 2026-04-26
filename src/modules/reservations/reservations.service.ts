@@ -10,6 +10,7 @@ import { UpdateReservationStatusDto } from './dto/update-reservation-status.dto'
 import { ReservationStatus } from '../../common/enums/reservation-status.enum';
 import { ResourceType } from '../../common/enums/resource-type.enum';
 import { Role } from '../../common/enums/role.enum';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class ReservationsService {
@@ -267,6 +268,7 @@ export class ReservationsService {
   }
 
   // Job que expira reservas con payment_deadline vencido
+  @Cron(CronExpression.EVERY_5_MINUTES)
   async expireOverdueReservations() {
     const overdueReservations = await this.reservationRepository
       .createQueryBuilder('r')

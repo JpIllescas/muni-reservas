@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 
 // Entidades
 import { User } from './modules/users/entities/user.entity';
@@ -53,6 +54,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
     }),
 
     // imports
+    ScheduleModule.forRoot(),
     AuthModule,
     UsersModule,
     ResourcesModule,
