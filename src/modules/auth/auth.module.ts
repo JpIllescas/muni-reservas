@@ -9,11 +9,13 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { User } from '../users/entities/user.entity';
 import { OtpCode } from './entities/otp-code.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     ConfigModule,
     PassportModule,
+    NotificationsModule,
     TypeOrmModule.forFeature([User, OtpCode]),
     JwtModule.registerAsync({
       imports: [ConfigModule],

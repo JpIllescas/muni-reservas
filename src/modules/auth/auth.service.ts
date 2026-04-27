@@ -15,6 +15,7 @@ import { RegisterDto } from './dto/register.dto'
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { OtpPurpose } from '../../common/enums/otp-purpose.enum';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class AuthService {
@@ -26,6 +27,7 @@ export class AuthService {
     private readonly otpRepository: Repository<OtpCode>,
 
     private readonly jwtService: JwtService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // Registro de nuevo usuario
@@ -157,9 +159,10 @@ export class AuthService {
 
     await this.otpRepository.save(otp);
 
+    await this.notificationsService.sendOtpEmail(user.email, user.fullName, code);
     // TODO: aquí llamaremos al servicio de correo cuando lo implementemos
     // Por ahora lo mostramos en consola para poder probarlo
-    console.log(`OTP para ${user.email}: ${code}`);
+    console.log(`[DEV] OTP para ${user.email}: ${code}`);
 
     return otp;
   }
