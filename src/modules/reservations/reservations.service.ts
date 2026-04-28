@@ -11,6 +11,7 @@ import { ReservationStatus } from '../../common/enums/reservation-status.enum';
 import { ResourceType } from '../../common/enums/resource-type.enum';
 import { Role } from '../../common/enums/role.enum';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ReservationsService {
@@ -26,6 +27,8 @@ export class ReservationsService {
 
     @InjectRepository(ResourceSchedule)
     private readonly scheduleRepository: Repository<ResourceSchedule>,
+
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(userId: string, dto: CreateReservationDto) {
@@ -232,7 +235,20 @@ export class ReservationsService {
     log.changedById = changedById;
     log.reason = dto.reason ?? null;
     await this.logRepository.save(log);
+    const reservationWithUser = await this.reservationRepository.findOne({
+      where: { id },
+      relations: ['user', 'resource']
+    });
 
+    if (reservationWithUser && reservationWithUser.user) {
+      await this.notificationsService.sendReservationStatusEmail(
+        reservationWithUser.user,
+        reservationWithUser,
+        dto.status,
+        dto.reason
+      );
+    }
+    
     return reservation;
   }
 
