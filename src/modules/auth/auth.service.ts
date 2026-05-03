@@ -160,10 +160,6 @@ export class AuthService {
     await this.otpRepository.save(otp);
 
     await this.notificationsService.sendOtpEmail(user.email, user.fullName, code);
-    // TODO: aquí llamaremos al servicio de correo cuando lo implementemos
-    // Por ahora lo mostramos en consola para poder probarlo
-    console.log(`[DEV] OTP para ${user.email}: ${code}`);
-
     return otp;
   }
 }

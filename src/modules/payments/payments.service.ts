@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository, } from '@nestjs/typeorm';
 import { Repository } from 'typeorm'
 import { Payment } from './entities/payment.entity';
@@ -7,6 +7,7 @@ import { ReservationLog } from '../reservations/entities/reservation-log.entity'
 import { PaymentStatus } from '../../common/enums/payment-status.enum';
 import { ReservationStatus } from '../../common/enums/reservation-status.enum';
 import { PaymentMethod } from '../../common/enums/payment-method.enum';
+import { Role } from '../../common/enums/role.enum';
 import { UploadVoucherDto } from './dto/upload-voucher.dto';
 
 @Injectable()
@@ -79,16 +80,31 @@ export class PaymentsService {
     };
   }
 
-  async getPaymentByReservation(reservationId: string) {
+  async getPaymentByReservation(reservationId: string, userId: string, userRole: Role) {
+    // 1. Primero buscamos la reserva para verificar quién es el dueño
+    const reservation = await this.reservationRepository.findOne({
+      where: { id: reservationId },
+    });
+
+    if (!reservation) {
+      throw new NotFoundException('Reserva no encontrada.');
+    }
+
+    // 2. Verificamos si el usuario es un ciudadano y si está intentando ver una reserva que no es suya
+    if (userRole === Role.CITIZEN && reservation.userId !== userId) {
+      throw new ForbiddenException('No tienes permiso para ver los detalles de pago de esta reserva.');
+    }
+
+    // 3. Si pasó la seguridad, buscamos el pago
     const payment = await this.paymentRepository.findOne({
       where: { reservationId },
-      order: { submittedAt: 'DESC' }, // Traer el último intento por si hay varios 
+      order: { submittedAt: 'DESC' }, 
     });
 
     if (!payment) {
       throw new NotFoundException('No hay pagos registrados para esta reserva.');
     }
-
+    
     return payment;
   }
 }

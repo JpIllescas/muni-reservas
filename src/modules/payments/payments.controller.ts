@@ -33,7 +33,10 @@ export class PaymentsController {
   
   // GET /api/payments/reservation/:reservationId - Ver el pago asociado a una reserva
   @Get('reservation/:reservationId')
-  getPaymentDetails(@Param('reservationId') reservationId: string) {
-    return this.paymentsService.getPaymentByReservation(reservationId);
+  getPaymentDetails(
+    @Param('reservationId') reservationId: string,
+    @CurrentUser() user: any, //saber quien hace la peticion
+  ) {
+    return this.paymentsService.getPaymentByReservation(reservationId, user.id, user.role);
   }
 }
