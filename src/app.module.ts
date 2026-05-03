@@ -24,6 +24,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ReportsModule } from './modules/reports/reports.module'
 import { AuditModule } from './modules/audit/audit.module';
+import { ConfigDbModule } from './modules/config/config-db.module'
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -66,6 +67,7 @@ import { AuditModule } from './modules/audit/audit.module';
     NotificationsModule,
     ReportsModule,
     AuditModule,
+    ConfigDbModule,
   ],
 })
 export class AppModule {}
