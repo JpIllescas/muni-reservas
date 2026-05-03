@@ -22,6 +22,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ReportsModule } from './modules/reports/reports.module'
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -62,6 +63,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     ReservationsModule,
     PaymentsModule,
     NotificationsModule,
+    ReportsModule,
   ],
 })
 export class AppModule {}
