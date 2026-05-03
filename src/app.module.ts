@@ -23,6 +23,7 @@ import { ReservationsModule } from './modules/reservations/reservations.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ReportsModule } from './modules/reports/reports.module'
+import { AuditModule } from './modules/audit/audit.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -64,6 +65,7 @@ import { ReportsModule } from './modules/reports/reports.module'
     PaymentsModule,
     NotificationsModule,
     ReportsModule,
+    AuditModule,
   ],
 })
 export class AppModule {}
