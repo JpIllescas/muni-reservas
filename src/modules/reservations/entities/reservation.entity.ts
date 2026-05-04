@@ -8,14 +8,14 @@ export class Reservation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user: User;
 
   @Column({ name: 'user_id' })
   userId: string;
 
-  @ManyToOne(() => Resource)
+  @ManyToOne(() => Resource, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'resource_id' })
   resource: Resource;
 

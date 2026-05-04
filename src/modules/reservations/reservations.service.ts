@@ -63,9 +63,14 @@ export class ReservationsService {
     if (resource.type === ResourceType.COURT) {
       // Validaciones específicas para canchas
       if (!dto.startTime || !dto.endTime) {
-        throw new BadRequestException(
-          'Para canchas debes especificar hora de inicio y fin.',
-        );
+        throw new BadRequestException('Para canchas debes especificar hora de inicio y fin.');
+      }
+
+      // Validar que el tiempo de inicio sea menor al tiempo de fin (ej. no dejar 18:00 a 10:00)
+      const start = new Date(`1970-01-01T${dto.startTime}:00Z`).getTime();
+      const end = new Date(`1970-01-01T${dto.endTime}:00Z`).getTime();
+      if (start >= end) {
+        throw new BadRequestException('la hora de inciio debe ser estrictamente anterior a la hora de fin.');
       }
 
       // Verificar que el usuario no tenga ya una reserva activa ese día en cualquier cancha

@@ -1,4 +1,4 @@
-import { IsDateString, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID, Matches, ValidateIf } from 'class-validator';
 
 export class CreateReservationDto {
   @IsNotEmpty()
@@ -6,15 +6,18 @@ export class CreateReservationDto {
   resourceId: string;
 
   @IsNotEmpty()
-  @IsDateString()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'reservationDate debe tener el formato YYYY-MM-DD' })
   reservationDate: string;
 
-  // Requerido para canchas, null para ranchos
-  @IsOptional()
+  // Solo requeridos si el recurso es de tipo COURT (cancha)
+  @ValidateIf(o => o.startTime !== undefined)
   @IsString()
-  startTime: string;
+  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: 'startTime debe tener formato HH:MM' })
+  startTime?: string;
 
-  @IsOptional()
+  @ValidateIf(o => o.endTime !== undefined)
   @IsString()
-  endTime: string;
+  @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: 'endTime debe tener formato HH:MM' })
+  endTime?: string;
 }
