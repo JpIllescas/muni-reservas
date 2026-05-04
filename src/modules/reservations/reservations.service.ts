@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In, Not } from 'typeorm';
 import { Reservation } from './entities/reservation.entity';
 import { ReservationLog } from './entities/reservation-log.entity';
 import { Resource } from '../resources/entities/resource.entity';
@@ -116,12 +116,15 @@ export class ReservationsService {
         where: {
           resourceId: dto.resourceId,
           reservationDate: dto.reservationDate,
+          status: Not(In([
+            ReservationStatus.CANCELLED,
+            ReservationStatus.EXPIRED,
+            ReservationStatus.REJECTED
+          ]))
         },
       });
 
-      if (existingRanchReservation &&
-        ![ReservationStatus.CANCELLED, ReservationStatus.EXPIRED, ReservationStatus.REJECTED]
-          .includes(existingRanchReservation.status)) {
+      if (existingRanchReservation) {
         throw new BadRequestException(
           'Este rancho ya está reservado para esa fecha.',
         );

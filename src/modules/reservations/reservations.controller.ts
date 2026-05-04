@@ -30,6 +30,12 @@ export class ReservationsController {
     return this.reservationsService.findAll(status);
   }
 
+  // GET /api/reservations/my - el ciudadano ve sus propias reservas
+  @Get('my')
+  findMyReservations(@CurrentUser() user:any) {
+    return this.reservationsService.findMyReservations(user.id);
+  }
+
   // GET /api/reservations/:id - detalle de una reserva 
   @Get(':id')
   findOne(

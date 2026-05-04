@@ -40,7 +40,7 @@ export class Reservation {
   status: ReservationStatus;
 
   // Null en ranchos de Florencia porque pagan el dia que llegan
-  @Column({ name: 'payment_date', type: 'timestamptz', nullable: true })
+  @Column({ name: 'payment_deadline', type: 'timestamptz', nullable: true })
   paymentDeadline: Date | null;
 
   @Column({ name: 'confirmed_at', type: 'timestamptz', nullable: true })
