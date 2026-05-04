@@ -15,16 +15,16 @@ import { ReservationLog } from './modules/reservations/entities/reservation-log.
 import { Payment } from './modules/payments/entities/payment.entity';
 import { AuditLog } from './modules/audit/entities/audit-log.entity';
 import { SystemConfig } from './modules/config/entities/system-config.entity';
-import { ResourceException } from './modules/resources/entities/resource-exception.entity'
+import { ResourceException } from './modules/resources/entities/resource-exception.entity';
 
 //Modulos
 import { AuthModule } from './modules/auth/auth.module';
 import { ReservationsModule } from './modules/reservations/reservations.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
-import { ReportsModule } from './modules/reports/reports.module'
+import { ReportsModule } from './modules/reports/reports.module';
 import { AuditModule } from './modules/audit/audit.module';
-import { ConfigDbModule } from './modules/config/config-db.module'
+import { ConfigDbModule } from './modules/config/config-db.module';
 @Module({
   imports: [
     ConfigModule.forRoot({

@@ -1,6 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
-import { InjectRepository, } from '@nestjs/typeorm';
-import { Repository } from 'typeorm'
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { Payment } from './entities/payment.entity';
 import { Reservation } from '../reservations/entities/reservation.entity';
 import { ReservationLog } from '../reservations/entities/reservation-log.entity';
@@ -24,13 +29,15 @@ export class PaymentsService {
   ) {}
 
   async uploadVoucher(
-    reservationId: string, 
+    reservationId: string,
     userId: string,
     file: Express.Multer.File,
     dto: UploadVoucherDto,
   ) {
     if (!file) {
-        throw new BadRequestException('La imagen o PDF de la boleta es requerido.');
+      throw new BadRequestException(
+        'La imagen o PDF de la boleta es requerido.',
+      );
     }
 
     // 1. Buscar la reserva
@@ -44,10 +51,12 @@ export class PaymentsService {
 
     // 2. Validar que esté pendiente de pago
     if (reservation.status !== ReservationStatus.PENDING_PAYMENT) {
-      throw new BadRequestException(`No puedes subir boleta. La reserva está en estado: ${reservation.status}`);
+      throw new BadRequestException(
+        `No puedes subir boleta. La reserva está en estado: ${reservation.status}`,
+      );
     }
 
-    // 3. Crear el registro de pago 
+    // 3. Crear el registro de pago
     const payment = this.paymentRepository.create({
       reservationId: reservation.id,
       method: PaymentMethod.VOUCHER,
@@ -69,7 +78,7 @@ export class PaymentsService {
     // 5. Dejar rastro en el log
     const log = new ReservationLog();
     log.reservationId = reservation.id;
-    log.fromStatus = ReservationStatus.PENDING_PAYMENT
+    log.fromStatus = ReservationStatus.PENDING_PAYMENT;
     log.toStatus = ReservationStatus.UNDER_REVIEW;
     log.changedById = userId;
     log.reason = 'El ciudadano subió su boleta de pago';
@@ -80,7 +89,11 @@ export class PaymentsService {
     };
   }
 
-  async getPaymentByReservation(reservationId: string, userId: string, userRole: Role) {
+  async getPaymentByReservation(
+    reservationId: string,
+    userId: string,
+    userRole: Role,
+  ) {
     // 1. Primero buscamos la reserva para verificar quién es el dueño
     const reservation = await this.reservationRepository.findOne({
       where: { id: reservationId },
@@ -92,19 +105,23 @@ export class PaymentsService {
 
     // 2. Verificamos si el usuario es un ciudadano y si está intentando ver una reserva que no es suya
     if (userRole === Role.CITIZEN && reservation.userId !== userId) {
-      throw new ForbiddenException('No tienes permiso para ver los detalles de pago de esta reserva.');
+      throw new ForbiddenException(
+        'No tienes permiso para ver los detalles de pago de esta reserva.',
+      );
     }
 
     // 3. Si pasó la seguridad, buscamos el pago
     const payment = await this.paymentRepository.findOne({
       where: { reservationId },
-      order: { submittedAt: 'DESC' }, 
+      order: { submittedAt: 'DESC' },
     });
 
     if (!payment) {
-      throw new NotFoundException('No hay pagos registrados para esta reserva.');
+      throw new NotFoundException(
+        'No hay pagos registrados para esta reserva.',
+      );
     }
-    
+
     return payment;
   }
 }

@@ -1,5 +1,13 @@
 import {
-  Controller, Get, Post, Patch, Param, Body, UseGuards, Delete } from '@nestjs/common';
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  UseGuards,
+  Delete,
+} from '@nestjs/common';
 import { ResourcesService } from './resources.service';
 import { CreateResourceDto } from './dto/create-resource.dto';
 import { UpdateResourceDto } from './dto/update-resource.dto';
@@ -61,10 +69,7 @@ export class ResourcesController {
   @Post(':id/schedules')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
-  addSchedule(
-    @Param('id') id: string,
-    @Body() dto: CreateScheduleDto,
-  ) {
+  addSchedule(@Param('id') id: string, @Body() dto: CreateScheduleDto) {
     return this.resourcesService.addSchedule(id, dto);
   }
 

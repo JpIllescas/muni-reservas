@@ -1,4 +1,14 @@
-import { Controller, Post, Get, Param, UseGuards, UseInterceptors, UploadedFile, Body, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Param,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  Body,
+  BadRequestException,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PaymentsService } from './payments.service';
 import { UploadVoucherDto } from './dto/upload-voucher.dto';
@@ -23,20 +33,32 @@ export class PaymentsController {
     @Body() dto: UploadVoucherDto,
   ) {
     // Validación básica del tamaño del archivo (ej. 5MB)
-    const maxSize = parseInt(process.env.MAX_FILE_SIZE_MB || '5', 10) * 1024 * 1024;
+    const maxSize =
+      parseInt(process.env.MAX_FILE_SIZE_MB || '5', 10) * 1024 * 1024;
     if (file && file.size > maxSize) {
-      throw new BadRequestException(`El archivo excede el límite de ${process.env.MAX_FILE_SIZE_MB}MB.`);
+      throw new BadRequestException(
+        `El archivo excede el límite de ${process.env.MAX_FILE_SIZE_MB}MB.`,
+      );
     }
 
-    return this.paymentsService.uploadVoucher(reservationId, user.id, file, dto);
+    return this.paymentsService.uploadVoucher(
+      reservationId,
+      user.id,
+      file,
+      dto,
+    );
   }
-  
+
   // GET /api/payments/reservation/:reservationId - Ver el pago asociado a una reserva
   @Get('reservation/:reservationId')
   getPaymentDetails(
     @Param('reservationId') reservationId: string,
     @CurrentUser() user: any, //saber quien hace la peticion
   ) {
-    return this.paymentsService.getPaymentByReservation(reservationId, user.id, user.role);
+    return this.paymentsService.getPaymentByReservation(
+      reservationId,
+      user.id,
+      user.role,
+    );
   }
 }

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, BadRequestException } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -15,16 +15,23 @@ import { ReservationLog } from '../reservations/entities/reservation-log.entity'
 
     // Configuracion de Multer para guardar las boletas en la carpeta definida en .env
     MulterModule.registerAsync({
-        useFactory: () => ({
-          storage: diskStorage({
-            destination: process.env.UPLOAD_PATH || './uploads',
-            filename: (req, file, cb) => {
-              // Generar un nombre único: timestamp-ranodm.extension
-              const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-              cb(null,`${uniqueSuffix}${extname(file.originalname)}`);
-            },
-          }),
+      useFactory: () => ({
+        storage: diskStorage({
+          destination: process.env.UPLOAD_PATH || './uploads',
+          filename: (req, file, cb) => {
+            // Generar un nombre único: timestamp-ranodm.extension
+            const uniqueSuffix =
+              Date.now() + '-' + Math.round(Math.random() * 1e9);
+            cb(null, `${uniqueSuffix}${extname(file.originalname)}`);
+          },
         }),
+        fileFilter: (req, file, cb) => {
+          if (!file.mimetype.match(/\/(jpg|jpeg|png|pdf)$/)) {
+            return cb(new BadRequestException('Solo se permiten imágenes (JPG/PNG) o PDFs'), false);
+          }
+          cb(null, true);
+        },
+      }),
     }),
   ],
   controllers: [PaymentsController],

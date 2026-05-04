@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Not } from 'typeorm';
 import { Reservation } from './entities/reservation.entity';
@@ -40,13 +45,20 @@ export class ReservationsService {
       throw new NotFoundException('Recurso no encontrado o inactivo.');
     }
 
-    const reservationDate = new Date(dto.reservationDate);
+    const reservationDate = new Date(dto.reservationDate + 'T00:00:00');
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     // Verificar que la fecha no sea en el pasado
     if (reservationDate < today) {
       throw new BadRequestException('No puedes reservar en una fecha pasada.');
+    }
+    // Si es hoy, verificar que la hora solicitada no haya pasado ya
+    if (dto.reservationDate === new Date().toISOString().split('T')[0] && dto.startTime) {
+      const currentTime = new Date().toTimeString().substring(0, 5);
+      if (dto.startTime < currentTime) {
+        throw new BadRequestException('La hora de inicio ya pasó el dia de hoy.');
+      }
     }
 
     // Verificar ventana de reserva (máximo advanceDays días hacia adelante)
@@ -63,14 +75,18 @@ export class ReservationsService {
     if (resource.type === ResourceType.COURT) {
       // Validaciones específicas para canchas
       if (!dto.startTime || !dto.endTime) {
-        throw new BadRequestException('Para canchas debes especificar hora de inicio y fin.');
+        throw new BadRequestException(
+          'Para canchas debes especificar hora de inicio y fin.',
+        );
       }
 
       // Validar que el tiempo de inicio sea menor al tiempo de fin (ej. no dejar 18:00 a 10:00)
       const start = new Date(`1970-01-01T${dto.startTime}:00Z`).getTime();
       const end = new Date(`1970-01-01T${dto.endTime}:00Z`).getTime();
       if (start >= end) {
-        throw new BadRequestException('la hora de inciio debe ser estrictamente anterior a la hora de fin.');
+        throw new BadRequestException(
+          'la hora de inciio debe ser estrictamente anterior a la hora de fin.',
+        );
       }
 
       // Verificar que el usuario no tenga ya una reserva activa ese día en cualquier cancha
@@ -81,7 +97,11 @@ export class ReservationsService {
         .andWhere('r.reservationDate = :date', { date: dto.reservationDate })
         .andWhere('res.type = :type', { type: ResourceType.COURT })
         .andWhere('r.status NOT IN (:...statuses)', {
-          statuses: [ReservationStatus.CANCELLED, ReservationStatus.EXPIRED, ReservationStatus.REJECTED],
+          statuses: [
+            ReservationStatus.CANCELLED,
+            ReservationStatus.EXPIRED,
+            ReservationStatus.REJECTED,
+          ],
         })
         .getOne();
 
@@ -99,7 +119,11 @@ export class ReservationsService {
         .andWhere('r.startTime < :endTime', { endTime: dto.endTime })
         .andWhere('r.endTime > :startTime', { startTime: dto.startTime })
         .andWhere('r.status NOT IN (:...statuses)', {
-          statuses: [ReservationStatus.CANCELLED, ReservationStatus.EXPIRED, ReservationStatus.REJECTED],
+          statuses: [
+            ReservationStatus.CANCELLED,
+            ReservationStatus.EXPIRED,
+            ReservationStatus.REJECTED,
+          ],
         })
         .getOne();
 
@@ -112,17 +136,21 @@ export class ReservationsService {
 
     if (resource.type === ResourceType.RANCH) {
       // Verificar que el rancho no esté ya reservado ese día
-      const existingRanchReservation = await this.reservationRepository.findOne({
-        where: {
-          resourceId: dto.resourceId,
-          reservationDate: dto.reservationDate,
-          status: Not(In([
-            ReservationStatus.CANCELLED,
-            ReservationStatus.EXPIRED,
-            ReservationStatus.REJECTED
-          ]))
+      const existingRanchReservation = await this.reservationRepository.findOne(
+        {
+          where: {
+            resourceId: dto.resourceId,
+            reservationDate: dto.reservationDate,
+            status: Not(
+              In([
+                ReservationStatus.CANCELLED,
+                ReservationStatus.EXPIRED,
+                ReservationStatus.REJECTED,
+              ]),
+            ),
+          },
         },
-      });
+      );
 
       if (existingRanchReservation) {
         throw new BadRequestException(
@@ -245,7 +273,7 @@ export class ReservationsService {
     await this.logRepository.save(log);
     const reservationWithUser = await this.reservationRepository.findOne({
       where: { id },
-      relations: ['user', 'resource']
+      relations: ['user', 'resource'],
     });
 
     if (reservationWithUser && reservationWithUser.user) {
@@ -253,10 +281,10 @@ export class ReservationsService {
         reservationWithUser.user,
         reservationWithUser,
         dto.status,
-        dto.reason
+        dto.reason,
       );
     }
-    
+
     return reservation;
   }
 
@@ -270,9 +298,14 @@ export class ReservationsService {
       throw new NotFoundException('Reserva no encontrada.');
     }
 
-    if ([ReservationStatus.APPROVED, ReservationStatus.CANCELLED,
-         ReservationStatus.EXPIRED, ReservationStatus.REJECTED]
-        .includes(reservation.status)) {
+    if (
+      [
+        ReservationStatus.APPROVED,
+        ReservationStatus.CANCELLED,
+        ReservationStatus.EXPIRED,
+        ReservationStatus.REJECTED,
+      ].includes(reservation.status)
+    ) {
       throw new BadRequestException('Esta reserva no puede ser cancelada.');
     }
 
@@ -296,7 +329,9 @@ export class ReservationsService {
   async expireOverdueReservations() {
     const overdueReservations = await this.reservationRepository
       .createQueryBuilder('r')
-      .where('r.status = :status', { status: ReservationStatus.PENDING_PAYMENT })
+      .where('r.status = :status', {
+        status: ReservationStatus.PENDING_PAYMENT,
+      })
       .andWhere('r.paymentDeadline IS NOT NULL')
       .andWhere('r.paymentDeadline < :now', { now: new Date() })
       .getMany();

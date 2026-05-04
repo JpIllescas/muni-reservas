@@ -11,20 +11,20 @@ export class ReportsService {
     private readonly reservationRepository: Repository<Reservation>,
 
     @InjectRepository(Resource)
-    private readonly resourceRepository: Repository<Resource>
+    private readonly resourceRepository: Repository<Resource>,
   ) {}
 
   // 1. Reporte: Cantidad de reservas agrupadas por su estado ( Aprobado, Pendiente, etc.)
   async getReservationsByStatus() {
     const result = await this.reservationRepository
-    .createQueryBuilder('reservation')
-    .select('reservation.status', 'status')
-    .addSelect('COUNT(reservation.id)', 'count')
-    .groupBy('reservation.status')
-    .getRawMany();
+      .createQueryBuilder('reservation')
+      .select('reservation.status', 'status')
+      .addSelect('COUNT(reservation.id)', 'count')
+      .groupBy('reservation.status')
+      .getRawMany();
 
-    // Convertir el string 'count' que devuelve postgres a un numero real 
-    return result.map(item => ({
+    // Convertir el string 'count' que devuelve postgres a un numero real
+    return result.map((item) => ({
       status: item.status,
       count: parseInt(item.count, 10),
     }));
@@ -33,20 +33,20 @@ export class ReportsService {
   // 2. Reporte: top de recursos (Canchas/Ranchos) con más reservas
   async getPopularResource() {
     const result = await this.reservationRepository
-    .createQueryBuilder('reservation')
-    .innerJoinAndSelect('reservation.resource', 'resource')
-    .select('resource.name', 'resourceName')
-    .addSelect('resource.type', 'resourceType')
-    .addSelect('COUNT(reservation.id)', 'reservationCount')
-    .groupBy('resource.id')
-    .orderBy('COUNT(reservation.id)', 'DESC')
-    .limit(5) // Solo mostrar el top 5
-    .getRawMany();
+      .createQueryBuilder('reservation')
+      .innerJoinAndSelect('reservation.resource', 'resource')
+      .select('resource.name', 'resourceName')
+      .addSelect('resource.type', 'resourceType')
+      .addSelect('COUNT(reservation.id)', 'reservationCount')
+      .groupBy('resource.id')
+      .orderBy('COUNT(reservation.id)', 'DESC')
+      .limit(5) // Solo mostrar el top 5
+      .getRawMany();
 
-   return result.map(item => ({
-    resourceName: item.resourceName,
-    resourceType: item.resourceType,
-    reservationCount: parseInt(item.reservationCount, 10),
-   }));
+    return result.map((item) => ({
+      resourceName: item.resourceName,
+      resourceType: item.resourceType,
+      reservationCount: parseInt(item.reservationCount, 10),
+    }));
   }
 }

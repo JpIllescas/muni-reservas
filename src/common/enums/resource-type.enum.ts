@@ -1,4 +1,4 @@
 export enum ResourceType {
-    COURT = 'court',
-    RANCH = 'ranch',
+  COURT = 'court',
+  RANCH = 'ranch',
 }

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
@@ -16,7 +20,16 @@ export class UsersService {
   // Obtener todos los usuarios — solo admin
   async findAll() {
     return this.userRepository.find({
-      select: ['id', 'fullName', 'email', 'dpi', 'phone', 'role', 'isActive', 'createdAt'],
+      select: [
+        'id',
+        'fullName',
+        'email',
+        'dpi',
+        'phone',
+        'role',
+        'isActive',
+        'createdAt',
+      ],
       order: { createdAt: 'DESC' },
     });
   }
@@ -25,7 +38,16 @@ export class UsersService {
   async findOne(id: string) {
     const user = await this.userRepository.findOne({
       where: { id },
-      select: ['id', 'fullName', 'email', 'dpi', 'phone', 'role', 'isActive', 'createdAt'],
+      select: [
+        'id',
+        'fullName',
+        'email',
+        'dpi',
+        'phone',
+        'role',
+        'isActive',
+        'createdAt',
+      ],
     });
 
     if (!user) {

@@ -1,4 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { Reservation } from '../../reservations/entities/reservation.entity';
 import { User } from '../../users/entities/user.entity';
 import { PaymentMethod } from '../../../common/enums/payment-method.enum';
@@ -9,44 +15,44 @@ export class Payment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
- @ManyToOne(() => Reservation)
- @JoinColumn({ name: 'reservation_id' })
- reservation: Reservation;
- 
- @Column({ name: 'reservation_id' })
- reservationId: string;
+  @ManyToOne(() => Reservation)
+  @JoinColumn({ name: 'reservation_id' })
+  reservation: Reservation;
 
- @Column({ type: 'enum', enum: PaymentMethod, default: PaymentMethod.VOUCHER })
- method: PaymentMethod;
+  @Column({ name: 'reservation_id' })
+  reservationId: string;
 
- @Column({ type: 'enum', enum: PaymentStatus, default: PaymentStatus.PENDING })
- status: PaymentStatus;
+  @Column({ type: 'enum', enum: PaymentMethod, default: PaymentMethod.VOUCHER })
+  method: PaymentMethod;
 
- @Column({ name: 'voucher_path', nullable: true })
- voucherPath: string;
+  @Column({ type: 'enum', enum: PaymentStatus, default: PaymentStatus.PENDING })
+  status: PaymentStatus;
 
- @Column({ name: 'voucher_original_name', nullable: true })
- voucherOriginalName: string;
+  @Column({ name: 'voucher_path', nullable: true })
+  voucherPath: string;
 
- @Column({ name: 'voucher_size_bytes', type: 'bigint', nullable: true })
- voucherSizeBytes: number;
+  @Column({ name: 'voucher_original_name', nullable: true })
+  voucherOriginalName: string;
 
- @Column({ name: 'transaction_reference', nullable: true})
- transactionReference: string;
+  @Column({ name: 'voucher_size_bytes', type: 'bigint', nullable: true })
+  voucherSizeBytes: number;
 
- @Column({ name: 'submitted_at', type: 'timestamptz', nullable: true })
- submittedAt: Date;
+  @Column({ name: 'transaction_reference', nullable: true })
+  transactionReference: string;
 
- @Column({ name: 'reviewed_at', type: 'timestamptz', nullable: true })
- reviewedAt: Date;
+  @Column({ name: 'submitted_at', type: 'timestamptz', nullable: true })
+  submittedAt: Date;
 
- @ManyToOne(() => User, { nullable: true })
- @JoinColumn({ name: 'reviewed_by' })
- reviewedBy: User;
+  @Column({ name: 'reviewed_at', type: 'timestamptz', nullable: true })
+  reviewedAt: Date;
 
- @Column({ name: 'reviewed_by', nullable: true })
- reviewedById: string;
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'reviewed_by' })
+  reviewedBy: User;
 
- @Column({ nullable: true, type: 'text' })
+  @Column({ name: 'reviewed_by', nullable: true })
+  reviewedById: string;
+
+  @Column({ nullable: true, type: 'text' })
   notes: string;
 }

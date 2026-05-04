@@ -7,7 +7,9 @@ import { ResourceSchedule } from './entities/resource-schedule.entity';
 import { ResourceException } from './entities/resource-exception.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Resource, ResourceSchedule, ResourceException])],
+  imports: [
+    TypeOrmModule.forFeature([Resource, ResourceSchedule, ResourceException]),
+  ],
   controllers: [ResourcesController],
   providers: [ResourcesService],
   exports: [ResourcesService],

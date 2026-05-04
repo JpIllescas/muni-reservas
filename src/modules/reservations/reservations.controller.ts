@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Patch, Param, Body, UseGuards, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  UseGuards,
+  Query,
+} from '@nestjs/common';
 import { ReservationsService } from './reservations.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationStatusDto } from './dto/update-reservation-status.dto';
@@ -14,12 +23,9 @@ import { ReservationStatus } from '../../common/enums/reservation-status.enum';
 export class ReservationsController {
   constructor(private readonly reservationsService: ReservationsService) {}
 
-  // POST /api/reservations - cualquier usuario autenticado 
+  // POST /api/reservations - cualquier usuario autenticado
   @Post()
-  create(
-    @CurrentUser() user: any,
-    @Body() dto: CreateReservationDto,
-  ) {
+  create(@CurrentUser() user: any, @Body() dto: CreateReservationDto) {
     return this.reservationsService.create(user.id, dto);
   }
 
@@ -32,20 +38,17 @@ export class ReservationsController {
 
   // GET /api/reservations/my - el ciudadano ve sus propias reservas
   @Get('my')
-  findMyReservations(@CurrentUser() user:any) {
+  findMyReservations(@CurrentUser() user: any) {
     return this.reservationsService.findMyReservations(user.id);
   }
 
-  // GET /api/reservations/:id - detalle de una reserva 
+  // GET /api/reservations/:id - detalle de una reserva
   @Get(':id')
-  findOne(
-     @Param('id') id: string,
-     @CurrentUser() user: any,
-  ) {
+  findOne(@Param('id') id: string, @CurrentUser() user: any) {
     return this.reservationsService.findOne(id, user.id, user.role);
   }
 
-  // PATCH /api/reservations/:id/status - admin y operador 
+  // PATCH /api/reservations/:id/status - admin y operador
   @Patch(':id/status')
   @Roles(Role.ADMIN, Role.OPERATOR)
   updateStatus(
@@ -58,10 +61,7 @@ export class ReservationsController {
 
   // PATCH /api/reservations/:id/cancel - el ciudadadno cancela su reserva
   @Patch(':id/cancel')
-  cancel(
-    @Param('id') id: string,
-    @CurrentUser() user: any,
-  ) {
+  cancel(@Param('id') id: string, @CurrentUser() user: any) {
     return this.reservationsService.cancel(id, user.id);
   }
 }

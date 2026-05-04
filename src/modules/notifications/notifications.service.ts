@@ -29,9 +29,14 @@ export class NotificationsService {
   }
 
   // Se agregara aca sendReservationStatusEmail()
-  async sendReservationStatusEmail(user: User, reservation: Reservation, newStatus: string, rejectionReason?: string ) {
+  async sendReservationStatusEmail(
+    user: User,
+    reservation: Reservation,
+    newStatus: string,
+    rejectionReason?: string,
+  ) {
     try {
-      // Formatear la fecha para que se vea bien 
+      // Formatear la fecha para que se vea bien
       const dateObj = new Date(reservation.reservationDate);
       const formattedDate = `${dateObj.getDate().toString().padStart(2, '0')}/${(dateObj.getMonth() + 1).toString().padStart(2, '0')}/${dateObj.getFullYear()}`;
 
@@ -41,8 +46,10 @@ export class NotificationsService {
         template: './reservation-status', // Busca reservation-status.hbs
         context: {
           fullName: user.fullName,
-          resourceName: reservation.resource ? reservation.resource.name : 'Recurso reservado',
-          reservationDate: formattedDate, 
+          resourceName: reservation.resource
+            ? reservation.resource.name
+            : 'Recurso reservado',
+          reservationDate: formattedDate,
           newStatus: newStatus,
           rejectionReason: rejectionReason,
           year: new Date().getFullYear(),
@@ -50,7 +57,10 @@ export class NotificationsService {
       });
       this.logger.log(`Correo de estado de reserva enviado a: ${user.email}`);
     } catch (error) {
-      this.logger.error(`Error al enviar correo de reserva a ${user.email}:`, error);
+      this.logger.error(
+        `Error al enviar correo de reserva a ${user.email}:`,
+        error,
+      );
     }
   }
 }

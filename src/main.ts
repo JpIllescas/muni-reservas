@@ -4,7 +4,7 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
   // Validación global — activa los decoradores de class-validator en todos los DTOs
   app.useGlobalPipes(
     new ValidationPipe({

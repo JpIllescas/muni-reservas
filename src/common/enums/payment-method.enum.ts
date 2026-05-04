@@ -1,4 +1,4 @@
 export enum PaymentMethod {
-    VOUCHER = 'voucher',
-    ONLINE = 'online',
+  VOUCHER = 'voucher',
+  ONLINE = 'online',
 }

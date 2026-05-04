@@ -1,4 +1,10 @@
-import { IsNumber, IsOptional, IsString, IsBoolean, Min } from 'class-validator';
+import {
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsBoolean,
+  Min,
+} from 'class-validator';
 
 export class UpdateResourceDto {
   @IsOptional()

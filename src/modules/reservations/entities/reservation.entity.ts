@@ -1,4 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Resource } from '../../resources/entities/resource.entity';
 import { ReservationStatus } from '../../../common/enums/reservation-status.enum';
@@ -24,7 +32,7 @@ export class Reservation {
 
   @Column({ name: 'reservation_date', type: 'date' })
   reservationDate: string;
-  
+
   // En ranchos estos dos campos son null porque es dia completo
   @Column({ name: 'start_time', type: 'time', nullable: true })
   startTime: string | null;
@@ -32,7 +40,7 @@ export class Reservation {
   @Column({ name: 'end_time', type: 'time', nullable: true })
   endTime: string | null;
 
-  @Column({ 
+  @Column({
     type: 'enum',
     enum: ReservationStatus,
     default: ReservationStatus.PENDING_PAYMENT,

@@ -5,9 +5,9 @@ import { AuditLog } from './entities/audit-log.entity';
 
 @Injectable()
 export class AuditService {
-  constructor (
-  @InjectRepository(AuditLog)
-  private readonly auditRepository: Repository<AuditLog>,
+  constructor(
+    @InjectRepository(AuditLog)
+    private readonly auditRepository: Repository<AuditLog>,
   ) {}
 
   // Metoo que usaran los otroso modulso para registrar acciones (sin bloquear su ejecucion)
@@ -26,20 +26,20 @@ export class AuditService {
       performedById,
       entityId,
       oldValue,
-      newValue, 
+      newValue,
       ipAddress,
     });
 
-  // Lo guardamos de manera asincrona. si falla por algún motivo.
-  // el proceso principal, para eso usamos un try chat silencioso o lo dejamos a simple
-  return this.auditRepository.save(log);
+    // Lo guardamos de manera asincrona. si falla por algún motivo.
+    // el proceso principal, para eso usamos un try chat silencioso o lo dejamos a simple
+    return this.auditRepository.save(log);
   }
 
   // Metodo para que el administrador vea todo el historial de cambios
   async findAll(limit: number = 50, offset: number = 0) {
     return this.auditRepository.find({
       relations: ['performedBy'],
-      order: { createdAt: 'DESC'},
+      order: { createdAt: 'DESC' },
       take: limit,
       skip: offset,
     });

@@ -15,7 +15,12 @@ export class ReservationLog {
   @Column({ name: 'reservation_id' })
   reservationId: string;
 
-  @Column({ name: 'from_status', type: 'enum', enum: ReservationStatus, nullable: true })
+  @Column({
+    name: 'from_status',
+    type: 'enum',
+    enum: ReservationStatus,
+    nullable: true,
+  })
   fromStatus: ReservationStatus | null;
 
   @Column({ name: 'to_status', type: 'enum', enum: ReservationStatus })

@@ -13,10 +13,7 @@ export class AuditController {
   // GET /api/audit?limit=50&offset=0 - Solo Administradores pueden ver esto
   @Roles(Role.ADMIN)
   @Get()
-  findAll(
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-  ) {
+  findAll(@Query('limit') limit?: string, @Query('offset') offset?: string) {
     const take = limit ? parseInt(limit, 10) : 50;
     const skip = offset ? parseInt(offset, 10) : 0;
     return this.auditService.findAll(take, skip);

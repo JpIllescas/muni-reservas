@@ -11,7 +11,7 @@ import * as otplib from 'otplib';
 
 import { User } from '../users/entities/user.entity';
 import { OtpCode } from './entities/otp-code.entity';
-import { RegisterDto } from './dto/register.dto'
+import { RegisterDto } from './dto/register.dto';
 import { RequestOtpDto } from './dto/request-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { OtpPurpose } from '../../common/enums/otp-purpose.enum';
@@ -108,7 +108,9 @@ export class AuthService {
 
     // Verificar que no haya expirado
     if (new Date() > otp.expiresAt) {
-      throw new UnauthorizedException('El código ha expirado. Solicita uno nuevo.');
+      throw new UnauthorizedException(
+        'El código ha expirado. Solicita uno nuevo.',
+      );
     }
 
     // Marcar el OTP como usado para que no se pueda reutilizar
@@ -159,7 +161,11 @@ export class AuthService {
 
     await this.otpRepository.save(otp);
 
-    await this.notificationsService.sendOtpEmail(user.email, user.fullName, code);
+    await this.notificationsService.sendOtpEmail(
+      user.email,
+      user.fullName,
+      code,
+    );
     return otp;
   }
 }

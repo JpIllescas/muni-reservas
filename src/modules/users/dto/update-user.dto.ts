@@ -3,14 +3,14 @@ import { Role } from '../../../common/enums/role.enum';
 
 export class UpdateUserDto {
   @IsOptional()
-   @IsString()
-   fullName: string;
+  @IsString()
+  fullName: string;
 
-   @IsOptional()
-   @IsString()
-   dpi: string;
+  @IsOptional()
+  @IsString()
+  dpi: string;
 
-   @IsOptional()
-   @IsString()
-   phone: string;
+  @IsOptional()
+  @IsString()
+  phone: string;
 }

@@ -1,4 +1,11 @@
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { ResourceType } from '../../../common/enums/resource-type.enum';
 
 export class CreateResourceDto {
@@ -16,7 +23,7 @@ export class CreateResourceDto {
 
   @IsOptional()
   @IsString()
-  location:string;
+  location: string;
 
   @IsOptional()
   @IsNumber()

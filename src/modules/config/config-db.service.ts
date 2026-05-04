@@ -17,15 +17,17 @@ export class ConfigDbService {
   // Obtener todas las configuraciones del sistema (Admin)
   async findAll() {
     return this.configRepository.find({
-      order: { key: 'ASC' }
+      order: { key: 'ASC' },
     });
   }
 
   // Obtener un valor especifico por su llave (Ej: 'max_advance_day')
   async findByKey(key: string) {
-    const config = await this.configRepository.findOne({ where: { key} });
+    const config = await this.configRepository.findOne({ where: { key } });
     if (!config) {
-      throw new NotFoundException(`Configuración con llave '${key}' no encontrada.`);
+      throw new NotFoundException(
+        `Configuración con llave '${key}' no encontrada.`,
+      );
     }
     return config;
   }
@@ -34,7 +36,7 @@ export class ConfigDbService {
   async update(key: string, dto: UpdateConfigDto, userId: string) {
     const config = await this.findByKey(key);
 
-    // Guardamos el valor viejo para la auditoria 
+    // Guardamos el valor viejo para la auditoria
     const oldValue = { value: config.value, description: config.description };
 
     config.value = dto.value;
@@ -45,14 +47,14 @@ export class ConfigDbService {
 
     const savedConfig = await this.configRepository.save(config);
 
-    // dejamos ratstro en el log de auditoria 
+    // dejamos ratstro en el log de auditoria
     await this.auditService.createLog(
       'system_config', // entidad afectada
-      'UPDATE',        // Accion
-      userId,          // Quien lo hizo 
-      savedConfig.id,  // ID del registro
-      oldValue,        // valor antes
-      { value: savedConfig.value, description: savedConfig.description } // Valor nuevo
+      'UPDATE', // Accion
+      userId, // Quien lo hizo
+      savedConfig.id, // ID del registro
+      oldValue, // valor antes
+      { value: savedConfig.value, description: savedConfig.description }, // Valor nuevo
     );
 
     return savedConfig;
