@@ -21,7 +21,7 @@ import { ReservationStatus } from '../../common/enums/reservation-status.enum';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('reservations')
 export class ReservationsController {
-  constructor(private readonly reservationsService: ReservationsService) {}
+  constructor(private readonly reservationsService: ReservationsService) { }
 
   // POST /api/reservations - cualquier usuario autenticado
   @Post()
@@ -32,8 +32,12 @@ export class ReservationsController {
   // GET /api/reservations - admin y operador ven todas
   @Get()
   @Roles(Role.ADMIN, Role.OPERATOR)
-  findAll(@Query('status') status?: ReservationStatus) {
-    return this.reservationsService.findAll(status);
+  findAll(
+    @Query('status') status?: ReservationStatus,
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '10'
+  ) {
+    return this.reservationsService.findAll(status, +page, +limit);
   }
 
   // GET /api/reservations/my - el ciudadano ve sus propias reservas

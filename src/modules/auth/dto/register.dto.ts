@@ -5,6 +5,7 @@ import {
   IsString,
   MinLength,
 } from 'class-validator';
+import { IsDPI } from '../../../common/validators/is-dpi.validator';
 
 export class RegisterDto {
   @IsNotEmpty()
@@ -16,6 +17,7 @@ export class RegisterDto {
 
   @IsOptional()
   @IsString()
+  @IsDPI()
   dpi: string;
 
   @IsOptional()

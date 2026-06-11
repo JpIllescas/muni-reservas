@@ -176,7 +176,7 @@ export class ReservationsService {
   }
 
   // Admin y operador ven todas las reservas
-  async findAll(status?: ReservationStatus) {
+  async findAll(status?: ReservationStatus, page: number = 1, limit: number = 10) {
     const query = this.reservationRepository
       .createQueryBuilder('r')
       .leftJoinAndSelect('r.resource', 'resource')
@@ -187,7 +187,24 @@ export class ReservationsService {
       query.where('r.status = :status', { status });
     }
 
-    return query.getMany();
+    // Calcular cuantos registros saltar segun la pagina
+    const skip = (page - 1) * limit;
+
+    // Aplicar la paginacion a nivel de base de datos
+    query.skip(skip).take(limit);
+
+    // Obtener los datos y el total general para el frontend
+    const [data, total] = await query.getManyAndCount();
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      }
+    };
   }
 
   // Ver detalle de una reserva
