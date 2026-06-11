@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import * as Joi from 'joi';
 
 // Entidades
 import { User } from './modules/users/entities/user.entity';
@@ -32,6 +33,17 @@ import { ConfigDbModule } from './modules/config/config-db.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      validationSchema: Joi.object({
+        DATABASE_URL: Joi.string().required(),
+        JWT_SECRET: Joi.string().required(),
+        JWT_EXPIRES_IN: Joi.string().required(),
+        MAIL_HOST: Joi.string().required(),
+        MAIL_PORT: Joi.number().required(),
+        MAIL_USER: Joi.string().required(),
+        MAIL_PASS: Joi.string().required(),
+        PORT: Joi.number().default(3000),
+        FRONTEND_URL: Joi.string().optional(),
+      }),
     }),
 
     TypeOrmModule.forRootAsync({
@@ -54,7 +66,7 @@ import { ConfigDbModule } from './modules/config/config-db.module';
           AuditLog,
           SystemConfig,
         ],
-        synchronize: true, // Solo para el desarrollo, en produccion usar migracion.
+        synchronize: process.env.NODE_ENV !== 'production', // Seguridad de producción forzada
         logging: true,
       }),
       inject: [ConfigService],
