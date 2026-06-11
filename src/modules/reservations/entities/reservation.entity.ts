@@ -6,12 +6,16 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Resource } from '../../resources/entities/resource.entity';
 import { ReservationStatus } from '../../../common/enums/reservation-status.enum';
 
 @Entity('reservations')
+@Index(['status', 'paymentDeadline']) // <--- para el CronJob
+@Index(['resourceId', 'reservationDate']) // <--- Para cruces de horarios
+@Index(['userId']) // <--- Para "Mis reservas"
 export class Reservation {
   @PrimaryGeneratedColumn('uuid')
   id: string;

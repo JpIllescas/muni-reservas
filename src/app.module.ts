@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 // Entidades
 import { User } from './modules/users/entities/user.entity';
@@ -25,6 +27,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ReportsModule } from './modules/reports/reports.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { ConfigDbModule } from './modules/config/config-db.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -57,6 +60,11 @@ import { ConfigDbModule } from './modules/config/config-db.module';
       inject: [ConfigService],
     }),
 
+    ThrottlerModule.forRoot([{
+      ttl: 60000,
+      limit: 10,
+    }]),
+
     // imports
     ScheduleModule.forRoot(),
     AuthModule,
@@ -69,5 +77,11 @@ import { ConfigDbModule } from './modules/config/config-db.module';
     AuditModule,
     ConfigDbModule,
   ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
-export class AppModule {}
+export class AppModule { }

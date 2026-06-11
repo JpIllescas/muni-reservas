@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as otplib from 'otplib';
+import * as crypto from 'crypto'
 
 import { User } from '../users/entities/user.entity';
 import { OtpCode } from './entities/otp-code.entity';
@@ -28,7 +29,7 @@ export class AuthService {
 
     private readonly jwtService: JwtService,
     private readonly notificationsService: NotificationsService,
-  ) {}
+  ) { }
 
   // Registro de nuevo usuario
   async register(dto: RegisterDto) {
@@ -146,7 +147,7 @@ export class AuthService {
     );
 
     // Generar código de 6 dígitos
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const code = crypto.randomInt(100000, 1000000).toString();
 
     // El OTP expira en 10 minutos
     const expiresAt = new Date();

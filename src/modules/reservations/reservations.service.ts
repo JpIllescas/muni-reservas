@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, Not } from 'typeorm';
+import { Repository, In, Not, DataSource } from 'typeorm';
 import { Reservation } from './entities/reservation.entity';
 import { ReservationLog } from './entities/reservation-log.entity';
 import { Resource } from '../resources/entities/resource.entity';
@@ -34,163 +34,136 @@ export class ReservationsService {
     private readonly scheduleRepository: Repository<ResourceSchedule>,
 
     private readonly notificationsService: NotificationsService,
-  ) {}
+
+    private readonly dataSource: DataSource,
+  ) { }
 
   async create(userId: string, dto: CreateReservationDto) {
-    const resource = await this.resourceRepository.findOne({
-      where: { id: dto.resourceId, isActive: true },
-    });
+    // Envolvemos TODO en una transacción ACID
+    return this.dataSource.transaction(async (manager) => {
 
-    if (!resource) {
-      throw new NotFoundException('Recurso no encontrado o inactivo.');
-    }
+      // BLOQUEO PESIMISTA: Si dos personas intentan reservar ESTE recurso al mismo tiempo,
+      // la base de datos hará que el segundo espere a que el primero termine.
+      const resource = await manager.findOne(Resource, {
+        where: { id: dto.resourceId, isActive: true },
+        lock: { mode: 'pessimistic_write' },
+      });
 
-    const reservationDate = new Date(dto.reservationDate + 'T00:00:00');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Verificar que la fecha no sea en el pasado
-    if (reservationDate < today) {
-      throw new BadRequestException('No puedes reservar en una fecha pasada.');
-    }
-    // Si es hoy, verificar que la hora solicitada no haya pasado ya
-    if (dto.reservationDate === new Date().toISOString().split('T')[0] && dto.startTime) {
-      const currentTime = new Date().toTimeString().substring(0, 5);
-      if (dto.startTime < currentTime) {
-        throw new BadRequestException('La hora de inicio ya pasó el dia de hoy.');
+      if (!resource) {
+        throw new NotFoundException('Recurso no encontrado o inactivo.');
       }
-    }
 
-    // Verificar ventana de reserva (máximo advanceDays días hacia adelante)
-    const maxDate = new Date();
-    maxDate.setDate(maxDate.getDate() + resource.advanceDays);
-    maxDate.setHours(23, 59, 59, 999);
+      const [year, month, day] = dto.reservationDate.split('-');
+      const reservationDate = new Date(Number(year), Number(month) - 1, Number(day));
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-    if (reservationDate > maxDate) {
-      throw new BadRequestException(
-        `Solo puedes reservar con un máximo de ${resource.advanceDays} días de anticipación.`,
-      );
-    }
+      if (reservationDate < today) {
+        throw new BadRequestException('No puedes reservar en una fecha pasada.');
+      }
 
-    if (resource.type === ResourceType.COURT) {
-      // Validaciones específicas para canchas
-      if (!dto.startTime || !dto.endTime) {
+      if (dto.reservationDate === new Date().toISOString().split('T')[0] && dto.startTime) {
+        const currentTime = new Date().toTimeString().substring(0, 5);
+        if (dto.startTime < currentTime) {
+          throw new BadRequestException('La hora de inicio ya pasó el dia de hoy.');
+        }
+      }
+
+      const maxDate = new Date();
+      maxDate.setDate(maxDate.getDate() + resource.advanceDays);
+      maxDate.setHours(23, 59, 59, 999);
+
+      if (reservationDate > maxDate) {
         throw new BadRequestException(
-          'Para canchas debes especificar hora de inicio y fin.',
+          `Solo puedes reservar con un máximo de ${resource.advanceDays} días de anticipación.`,
         );
       }
 
-      // Validar que el tiempo de inicio sea menor al tiempo de fin (ej. no dejar 18:00 a 10:00)
-      const start = new Date(`1970-01-01T${dto.startTime}:00Z`).getTime();
-      const end = new Date(`1970-01-01T${dto.endTime}:00Z`).getTime();
-      if (start >= end) {
-        throw new BadRequestException(
-          'la hora de inciio debe ser estrictamente anterior a la hora de fin.',
-        );
+      if (resource.type === ResourceType.COURT) {
+        if (!dto.startTime || !dto.endTime) {
+          throw new BadRequestException('Para canchas debes especificar hora de inicio y fin.');
+        }
+
+        const start = new Date(`1970-01-01T${dto.startTime}:00Z`).getTime();
+        const end = new Date(`1970-01-01T${dto.endTime}:00Z`).getTime();
+        if (start >= end) {
+          throw new BadRequestException('La hora de inicio debe ser estrictamente anterior a la hora de fin.');
+        }
+
+        const existingCourtReservation = await manager
+          .createQueryBuilder(Reservation, 'r')
+          .innerJoin('r.resource', 'res')
+          .where('r.userId = :userId', { userId })
+          .andWhere('r.reservationDate = :date', { date: dto.reservationDate })
+          .andWhere('res.type = :type', { type: ResourceType.COURT })
+          .andWhere('r.status NOT IN (:...statuses)', {
+            statuses: [ReservationStatus.CANCELLED, ReservationStatus.EXPIRED, ReservationStatus.REJECTED],
+          })
+          .getOne();
+
+        if (existingCourtReservation) {
+          throw new BadRequestException('Ya tienes una reserva de cancha para ese día.');
+        }
+
+        const conflictingReservation = await manager
+          .createQueryBuilder(Reservation, 'r')
+          .where('r.resourceId = :resourceId', { resourceId: dto.resourceId })
+          .andWhere('r.reservationDate = :date', { date: dto.reservationDate })
+          .andWhere('r.startTime < :endTime', { endTime: dto.endTime })
+          .andWhere('r.endTime > :startTime', { startTime: dto.startTime })
+          .andWhere('r.status NOT IN (:...statuses)', {
+            statuses: [ReservationStatus.CANCELLED, ReservationStatus.EXPIRED, ReservationStatus.REJECTED],
+          })
+          .getOne();
+
+        if (conflictingReservation) {
+          throw new BadRequestException('Ese horario ya está ocupado. Por favor elige otro.');
+        }
       }
 
-      // Verificar que el usuario no tenga ya una reserva activa ese día en cualquier cancha
-      const existingCourtReservation = await this.reservationRepository
-        .createQueryBuilder('r')
-        .innerJoin('r.resource', 'res')
-        .where('r.userId = :userId', { userId })
-        .andWhere('r.reservationDate = :date', { date: dto.reservationDate })
-        .andWhere('res.type = :type', { type: ResourceType.COURT })
-        .andWhere('r.status NOT IN (:...statuses)', {
-          statuses: [
-            ReservationStatus.CANCELLED,
-            ReservationStatus.EXPIRED,
-            ReservationStatus.REJECTED,
-          ],
-        })
-        .getOne();
-
-      if (existingCourtReservation) {
-        throw new BadRequestException(
-          'Ya tienes una reserva de cancha para ese día.',
-        );
-      }
-
-      // Verificar que el horario solicitado no esté ocupado
-      const conflictingReservation = await this.reservationRepository
-        .createQueryBuilder('r')
-        .where('r.resourceId = :resourceId', { resourceId: dto.resourceId })
-        .andWhere('r.reservationDate = :date', { date: dto.reservationDate })
-        .andWhere('r.startTime < :endTime', { endTime: dto.endTime })
-        .andWhere('r.endTime > :startTime', { startTime: dto.startTime })
-        .andWhere('r.status NOT IN (:...statuses)', {
-          statuses: [
-            ReservationStatus.CANCELLED,
-            ReservationStatus.EXPIRED,
-            ReservationStatus.REJECTED,
-          ],
-        })
-        .getOne();
-
-      if (conflictingReservation) {
-        throw new BadRequestException(
-          'Ese horario ya está ocupado. Por favor elige otro.',
-        );
-      }
-    }
-
-    if (resource.type === ResourceType.RANCH) {
-      // Verificar que el rancho no esté ya reservado ese día
-      const existingRanchReservation = await this.reservationRepository.findOne(
-        {
+      if (resource.type === ResourceType.RANCH) {
+        const existingRanchReservation = await manager.findOne(Reservation, {
           where: {
             resourceId: dto.resourceId,
             reservationDate: dto.reservationDate,
-            status: Not(
-              In([
-                ReservationStatus.CANCELLED,
-                ReservationStatus.EXPIRED,
-                ReservationStatus.REJECTED,
-              ]),
-            ),
+            status: Not(In([ReservationStatus.CANCELLED, ReservationStatus.EXPIRED, ReservationStatus.REJECTED])),
           },
-        },
-      );
+        });
 
-      if (existingRanchReservation) {
-        throw new BadRequestException(
-          'Este rancho ya está reservado para esa fecha.',
-        );
+        if (existingRanchReservation) {
+          throw new BadRequestException('Este rancho ya está reservado para esa fecha.');
+        }
       }
-    }
 
-    // Calcular payment_deadline
-    // En canchas: 24 horas desde ahora
-    // En ranchos: null porque pagan el día que llegan
-    let paymentDeadline: Date | null = null;
+      let paymentDeadline: Date | null = null;
+      if (resource.type === ResourceType.COURT) {
+        paymentDeadline = new Date();
+        paymentDeadline.setHours(paymentDeadline.getHours() + 24);
+      }
 
-    if (resource.type === ResourceType.COURT) {
-      paymentDeadline = new Date();
-      paymentDeadline.setHours(paymentDeadline.getHours() + 24);
-    }
+      const reservation = manager.create(Reservation, {
+        userId,
+        resourceId: dto.resourceId,
+        reservationDate: dto.reservationDate,
+        startTime: dto.startTime ?? null,
+        endTime: dto.endTime ?? null,
+        status: ReservationStatus.PENDING_PAYMENT,
+        paymentDeadline,
+      });
 
-    const reservation = this.reservationRepository.create({
-      userId,
-      resourceId: dto.resourceId,
-      reservationDate: dto.reservationDate,
-      startTime: dto.startTime ?? null,
-      endTime: dto.endTime ?? null,
-      status: ReservationStatus.PENDING_PAYMENT,
-      paymentDeadline,
+      const saved = await manager.save(reservation);
+
+      const log = new ReservationLog();
+      log.reservationId = saved.id;
+      log.fromStatus = null;
+      log.toStatus = ReservationStatus.PENDING_PAYMENT;
+      log.changedById = userId;
+      log.reason = 'Reserva creada';
+
+      await manager.save(log); // Si esto falla, NADA se guarda gracias a la transacción.
+
+      return saved;
     });
-
-    const saved = await this.reservationRepository.save(reservation);
-
-    // Registrar en el log
-    const log = new ReservationLog();
-    log.reservationId = saved.id;
-    log.fromStatus = null;
-    log.toStatus = ReservationStatus.PENDING_PAYMENT;
-    log.changedById = userId;
-    log.reason = 'Reserva creada';
-    await this.logRepository.save(log);
-
-    return saved;
   }
 
   // El ciudadano ve sus propias reservas
@@ -336,19 +309,34 @@ export class ReservationsService {
       .andWhere('r.paymentDeadline < :now', { now: new Date() })
       .getMany();
 
-    for (const reservation of overdueReservations) {
-      reservation.status = ReservationStatus.EXPIRED;
-      await this.reservationRepository.save(reservation);
+    if (overdueReservations.length === 0) {
+      return 0;
+    }
 
+    // Obtener solo los IDs
+    const reservationIds = overdueReservations.map(r => r.id);
+
+    // 1. una sola consulta
+    await this.reservationRepository
+      .createQueryBuilder()
+      .update(Reservation)
+      .set({ status: ReservationStatus.EXPIRED })
+      .whereInIds(reservationIds)
+      .execute();
+
+    // 2. Creacion de LOGS 
+    const logs = reservationIds.map((id) => {
       const log = new ReservationLog();
-      log.reservationId = reservation.id;
+      log.reservationId = id;
       log.fromStatus = ReservationStatus.PENDING_PAYMENT;
       log.toStatus = ReservationStatus.EXPIRED;
       log.changedById = null;
       log.reason = 'Expirada automáticamente por vencimiento de plazo de pago';
-      await this.logRepository.save(log);
-    }
+      return log;
+    });
 
-    return overdueReservations.length;
+    await this.logRepository.save(logs);
+
+    return reservationIds.length;
   }
 }
