@@ -9,6 +9,7 @@ import { Repository, In, Not, DataSource } from 'typeorm';
 import { Reservation } from './entities/reservation.entity';
 import { ReservationLog } from './entities/reservation-log.entity';
 import { Resource } from '../resources/entities/resource.entity';
+import { Payment } from '../payments/entities/payment.entity';
 import { ResourceSchedule } from '../resources/entities/resource-schedule.entity';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationStatusDto } from './dto/update-reservation-status.dto';
@@ -17,9 +18,19 @@ import { ResourceType } from '../../common/enums/resource-type.enum';
 import { Role } from '../../common/enums/role.enum';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class ReservationsService {
+  // Transiciones que un operador/admin puede ejecutar manualmente.
+  private readonly allowedTransitions: Record<string, ReservationStatus[]> = {
+    [ReservationStatus.UNDER_REVIEW]: [
+      ReservationStatus.APPROVED,
+      ReservationStatus.REJECTED,
+    ],
+    [ReservationStatus.PENDING_PAYMENT]: [ReservationStatus.REJECTED],
+  };
+
   constructor(
     @InjectRepository(Reservation)
     private readonly reservationRepository: Repository<Reservation>,
@@ -32,6 +43,8 @@ export class ReservationsService {
 
     @InjectRepository(ResourceSchedule)
     private readonly scheduleRepository: Repository<ResourceSchedule>,
+
+    private readonly auditService: AuditService,
 
     private readonly notificationsService: NotificationsService,
 
@@ -231,45 +244,86 @@ export class ReservationsService {
     id: string,
     dto: UpdateReservationStatusDto,
     changedById: string,
+    ipAddress?: string,
   ) {
-    const reservation = await this.reservationRepository.findOne({
-      where: { id },
-    });
+    const { reservation, fromStatus } = await this.dataSource.transaction(
+      async (manager) => {
+        const found = await manager.findOne(Reservation, {
+          where: { id },
+          lock: { mode: 'pessimistic_write' },
+        });
 
-    if (!reservation) {
-      throw new NotFoundException('Reserva no encontrada.');
-    }
+        if (!found) {
+          throw new NotFoundException('Reserva no encontrada.');
+        }
 
-    const fromStatus = reservation.status;
-    reservation.status = dto.status;
+        const fromStatus = found.status;
 
-    if (dto.status === ReservationStatus.APPROVED) {
-      reservation.confirmedAt = new Date();
-    }
+        // 1. Validar la transición contra la máquina de estados.
+        const allowed = this.allowedTransitions[fromStatus] ?? [];
+        if (!allowed.includes(dto.status)) {
+          throw new BadRequestException(
+            `Transición inválida: no se puede pasar una reserva de "${fromStatus}" a "${dto.status}".`,
+          );
+        }
 
-    if (dto.status === ReservationStatus.REJECTED) {
-      reservation.rejectionReason = dto.reason;
-    }
+        // 2. Aprobar exige un pago registrado.
+        if (dto.status === ReservationStatus.APPROVED) {
+          const payment = await manager.findOne(Payment, {
+            where: { reservationId: id },
+          });
+          if (!payment) {
+            throw new BadRequestException(
+              'No se puede aprobar una reserva sin un pago registrado.',
+            );
+          }
+        }
 
-    await this.reservationRepository.save(reservation);
+        // 3. Aplicar el cambio.
+        found.status = dto.status;
+        if (dto.status === ReservationStatus.APPROVED) {
+          found.confirmedAt = new Date();
+        }
+        if (dto.status === ReservationStatus.REJECTED) {
+          found.rejectionReason = dto.reason;
+        }
+        await manager.save(found);
 
-    // Registrar el cambio en el log
-    const log = new ReservationLog();
-    log.reservationId = id;
-    log.fromStatus = fromStatus;
-    log.toStatus = dto.status;
-    log.changedById = changedById;
-    log.reason = dto.reason ?? null;
-    await this.logRepository.save(log);
-    const reservationWithUser = await this.reservationRepository.findOne({
-      where: { id },
-      relations: ['user', 'resource'],
-    });
+        // 4. Log inmutable del cambio (dentro de la misma tx: todo o nada).
+        const log = new ReservationLog();
+        log.reservationId = id;
+        log.fromStatus = fromStatus;
+        log.toStatus = dto.status;
+        log.changedById = changedById;
+        log.reason = dto.reason ?? null;
+        await manager.save(log);
 
-    if (reservationWithUser && reservationWithUser.user) {
+        const reservation = await manager.findOne(Reservation, {
+          where: { id },
+          relations: ['user', 'resource'],
+        });
+
+        return { reservation, fromStatus };
+      },
+    );
+
+    // 5. Auditoría de la acción administrativa (fuera de la transacción).
+    await this.auditService.createLog(
+      'Reservation',
+      `STATUS_${dto.status.toUpperCase()}`,
+      changedById,
+      id,
+      { status: fromStatus },
+      { status: dto.status },
+      ipAddress,
+    );
+
+    // 6. Notificación FUERA de la transacción: no mantenemos el lock
+    // abierto mientras esperamos al servidor SMTP.
+    if (reservation && reservation.user) {
       await this.notificationsService.sendReservationStatusEmail(
-        reservationWithUser.user,
-        reservationWithUser,
+        reservation.user,
+        reservation,
         dto.status,
         dto.reason,
       );
@@ -317,43 +371,38 @@ export class ReservationsService {
   // Job que expira reservas con payment_deadline vencido
   @Cron(CronExpression.EVERY_5_MINUTES)
   async expireOverdueReservations() {
-    const overdueReservations = await this.reservationRepository
-      .createQueryBuilder('r')
-      .where('r.status = :status', {
-        status: ReservationStatus.PENDING_PAYMENT,
-      })
-      .andWhere('r.paymentDeadline IS NOT NULL')
-      .andWhere('r.paymentDeadline < :now', { now: new Date() })
-      .getMany();
-
-    if (overdueReservations.length === 0) {
-      return 0;
-    }
-
-    // Obtener solo los IDs
-    const reservationIds = overdueReservations.map(r => r.id);
-
-    // 1. una sola consulta
-    await this.reservationRepository
+    const result = await this.reservationRepository
       .createQueryBuilder()
       .update(Reservation)
       .set({ status: ReservationStatus.EXPIRED })
-      .whereInIds(reservationIds)
+      .where('status = :status', {
+        status: ReservationStatus.PENDING_PAYMENT,
+      })
+      .andWhere('paymentDeadline IS NOT NULL')
+      .andWhere('paymentDeadline < :now', { now: new Date() })
+      .returning(['id'])
       .execute();
 
-    // 2. Creacion de LOGS 
-    const logs = reservationIds.map((id) => {
+    const expiredIds: string[] = result.raw.map((r: { id: string }) => r.id);
+
+    if (expiredIds.length === 0) {
+      return 0;
+    }
+
+    // Dejar rastro en el LOG para cada reserva expirada
+    const logs = expiredIds.map((id) => {
       const log = new ReservationLog();
       log.reservationId = id;
       log.fromStatus = ReservationStatus.PENDING_PAYMENT;
       log.toStatus = ReservationStatus.EXPIRED;
       log.changedById = null;
-      log.reason = 'Expirada automáticamente por vencimiento de plazo de pago';
+      log.reason = 'Expirada automaticamente por vencimiento de plazo de pago'
       return log;
     });
 
     await this.logRepository.save(logs);
 
-    return reservationIds.length;
+    return expiredIds.length;
   }
+
 }

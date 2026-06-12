@@ -11,8 +11,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       ? exception.getStatus()
       : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    let message = exception instanceof HttpException 
-      ? exception.getResponse() 
+    let message = exception instanceof HttpException
+      ? exception.getResponse()
       : 'Error interno del servidor';
 
     // Interceptar errores únicos de base de datos (PostgreSQL 23505)
@@ -22,6 +22,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message = {
         message: 'El registro ya existe. Verifica que no estés usando un correo o DPI duplicado.',
         error: 'Conflict'
+      };
+    }
+
+    // Exclusion violation (23P01): el backstop de la BD rechazó un solapamiento 
+    if (exception?.code === '23P01') {
+      status = HttpStatus.CONFLICT;
+      message = {
+        message: 'Ese horario acaba de ser ocupado. por favor elige otro',
+        error: 'Conflict',
       };
     }
 
