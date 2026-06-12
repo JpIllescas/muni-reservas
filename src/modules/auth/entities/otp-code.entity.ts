@@ -31,6 +31,10 @@ export class OtpCode {
   @Column({ default: false })
   used: boolean;
 
+  // Intentos fallidos de validación; tras N el OTP se quema (anti fuerza bruta)
+  @Column({ default: 0 })
+  attempts: number;
+
   @Index()
   @Column({ name: 'expires_at', type: 'timestamptz' })
   expiresAt: Date;

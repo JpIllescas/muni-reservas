@@ -1,6 +1,6 @@
 import {
   Injectable,
-  BadRequestException,
+  Logger,
   UnauthorizedException,
   ConflictException,
 } from '@nestjs/common';
@@ -22,6 +22,9 @@ import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+  private readonly MAX_OTP_ATTEMPTS = 5;
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -97,19 +100,33 @@ export class AuthService {
     };
   }
 
-  // Helper: busca y valida un OTP por proposito, lo marca usado
+  // Helper: valida el OTP activo del usuario para un propósito, con lockout.
+  // Busca por (usuario, propósito) — NO por código — para poder contar intentos
+  // fallidos sobre el mismo OTP y quemarlo tras MAX_OTP_ATTEMPTS (anti fuerza bruta).
   private async validateOtp(userId: string, code: string, purpose: OtpPurpose) {
     const otp = await this.otpRepository.findOne({
-      where: { userId, code, purpose, used: false },
+      where: { userId, purpose, used: false },
       order: { createdAt: 'DESC' },
     });
     if (!otp) {
-      throw new UnauthorizedException('Código inválido.');
+      throw new UnauthorizedException('Código inválido o ya utilizado.');
     }
     if (new Date() > otp.expiresAt) {
       throw new UnauthorizedException(
         'El código ha expirado. Solicita uno nuevo.',
       );
+    }
+    if (otp.attempts >= this.MAX_OTP_ATTEMPTS) {
+      otp.used = true; // quemamos el OTP: hay que pedir uno nuevo
+      await this.otpRepository.save(otp);
+      throw new UnauthorizedException(
+        'Demasiados intentos fallidos. Solicita un código nuevo.',
+      );
+    }
+    if (otp.code !== code) {
+      otp.attempts += 1;
+      await this.otpRepository.save(otp);
+      throw new UnauthorizedException('Código inválido.');
     }
     otp.used = true;
     await this.otpRepository.save(otp);
@@ -221,6 +238,11 @@ export class AuthService {
 
     // Generar código de 6 dígitos
     const code = crypto.randomInt(100000, 1000000).toString();
+
+    // En desarrollo logueamos el OTP para poder probar sin depender del correo
+    if (process.env.NODE_ENV !== 'production') {
+      this.logger.warn(`[DEV] OTP para ${user.email} (${purpose}): ${code}`);
+    }
 
     // El OTP expira en 10 minutos
     const expiresAt = new Date();
