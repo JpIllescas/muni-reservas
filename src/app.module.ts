@@ -35,7 +35,9 @@ import { ConfigDbModule } from './modules/config/config-db.module';
       isGlobal: true,
       validationSchema: Joi.object({
         DATABASE_URL: Joi.string().required(),
-        JWT_SECRET: Joi.string().required(),
+        DB_SSL: Joi.string().valid('true', 'false').default('false'),
+        NODE_ENV: Joi.string().valid('development', 'production', 'test').required(),
+        JWT_SECRET: Joi.string().min(32).required(),
         JWT_EXPIRES_IN: Joi.string().required(),
         MAIL_HOST: Joi.string().required(),
         MAIL_PORT: Joi.number().required(),
@@ -48,27 +50,28 @@ import { ConfigDbModule } from './modules/config/config-db.module';
 
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        url: configService.get<string>('DATABASE_URL'),
-        ssl: {
-          rejectUnauthorized: false,
-        },
-        entities: [
-          User,
-          OtpCode,
-          Resource,
-          ResourceSchedule,
-          ResourceException,
-          Reservation,
-          ReservationLog,
-          Payment,
-          AuditLog,
-          SystemConfig,
-        ],
-        synchronize: process.env.NODE_ENV !== 'production', // Seguridad de producción forzada
-        logging: true,
-      }),
+      useFactory: (configService: ConfigService) => {
+        const isProd = configService.get<string>('NODE_ENV') === 'production';
+        return {
+          type: 'postgres',
+          url: configService.get<string>('DATABASE_URL'),
+          ssl: configService.get<string>('DB_SSL') === 'true' ? { rejectUnauthorized: false } : false,
+          entities: [
+            User,
+            OtpCode,
+            Resource,
+            ResourceSchedule,
+            ResourceException,
+            Reservation,
+            ReservationLog,
+            Payment,
+            AuditLog,
+            SystemConfig,
+          ],
+          synchronize: !isProd,
+          logging: isProd ? ['error', 'warn'] : true,
+        };
+      },
       inject: [ConfigService],
     }),
 

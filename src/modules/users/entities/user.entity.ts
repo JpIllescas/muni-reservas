@@ -20,6 +20,14 @@ export class User {
   @Column({ unique: true })
   email: string;
 
+  // Hash bcrypt. select:false => nunca se devuelve en queries normales;
+  // en el login hay que pedirla explícitamente con addSelect/select.
+  @Column({ select: false })
+  password: string;
+
+  @Column({ name: 'is_email_verified', default: false })
+  isEmailVerified: boolean;
+
   @Column({ nullable: true, unique: true })
   dpi: string;
 
