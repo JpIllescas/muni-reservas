@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Body, UseGuards, Ip } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
@@ -11,7 +11,7 @@ import { Role } from '../../common/enums/role.enum';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) { }
 
   // GET /api/users - Solo admin
   @Get()
@@ -42,14 +42,23 @@ export class UsersController {
   // PATCH /api/users/:id/role - solo admin
   @Patch(':id/role')
   @Roles(Role.ADMIN)
-  updateRole(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
-    return this.usersService.updateRole(id, dto);
+  updateRole(
+    @Param('id') id: string,
+    @Body() dto: UpdateRoleDto,
+    @CurrentUser() user: any,
+    @Ip() ip: string,
+  ) {
+    return this.usersService.updateRole(id, dto, user.id, ip);
   }
 
   // PATCH /api/users/:id/toggle-active - solo admin
   @Patch(':id/toggle-active')
   @Roles(Role.ADMIN)
-  toggleActive(@Param('id') id: string) {
-    return this.usersService.toggleActive(id);
+  toggleActive(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Ip() ip: string,
+  ) {
+    return this.usersService.toggleActive(id, user.id, ip);
   }
 }

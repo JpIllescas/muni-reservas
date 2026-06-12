@@ -7,6 +7,7 @@ import {
   Body,
   UseGuards,
   Query,
+  Ip,
 } from '@nestjs/common';
 import { ReservationsService } from './reservations.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
@@ -59,8 +60,9 @@ export class ReservationsController {
     @Param('id') id: string,
     @Body() dto: UpdateReservationStatusDto,
     @CurrentUser() user: any,
+    @Ip() ip: string,
   ) {
-    return this.reservationsService.updateStatus(id, dto, user.id);
+    return this.reservationsService.updateStatus(id, dto, user.id, ip);
   }
 
   // PATCH /api/reservations/:id/cancel - el ciudadadno cancela su reserva

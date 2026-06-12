@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
+import { AuditService } from '../audit/audit.service';
 import { Role } from '../../common/enums/role.enum';
 
 @Injectable()
@@ -15,7 +16,10 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-  ) {}
+
+    private readonly auditService: AuditService,
+  ) { }
+
 
   // Obtener todos los usuarios — solo admin
   async findAll() {
@@ -66,17 +70,47 @@ export class UsersService {
   }
 
   // Admin cambia el rol de un usuario
-  async updateRole(id: string, dto: UpdateRoleDto) {
+  async updateRole(
+    id: string,
+    dto: UpdateRoleDto,
+    performedById: string,
+    ipAddress?: string,
+  ) {
     const user = await this.findOne(id);
+    const oldRole = user.role;
     user.role = dto.role;
-    return this.userRepository.save(user);
+    const saved = await this.userRepository.save(user);
+
+    await this.auditService.createLog(
+      'User',
+      'UPDATE_ROLE',
+      performedById,
+      id,
+      { role: oldRole },
+      { role: dto.role },
+      ipAddress,
+    );
+
+    return saved;
   }
 
   // Admin activa o desactiva un usuario
-  async toggleActive(id: string) {
+  async toggleActive(id: string, performedById: string, ipAddress?: string) {
     const user = await this.findOne(id);
+    const oldValue = user.isActive;
     user.isActive = !user.isActive;
     await this.userRepository.save(user);
+
+    await this.auditService.createLog(
+      'User',
+      'TOGGLE_ACTIVE',
+      performedById,
+      id,
+      { isActive: oldValue },
+      { isActive: user.isActive },
+      ipAddress,
+    );
+
     return {
       message: `Usuario ${user.isActive ? 'activado' : 'desactivado'} correctamente.`,
     };
