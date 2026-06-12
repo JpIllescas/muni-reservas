@@ -32,7 +32,7 @@ export class OtpCode {
   used: boolean;
 
   @Index()
-  @Column({ name: 'expires_at', type: 'timestamp' })
+  @Column({ name: 'expires_at', type: 'timestamptz' })
   expiresAt: Date;
 
   @CreateDateColumn({ name: 'created_at' })

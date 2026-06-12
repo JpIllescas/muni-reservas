@@ -51,6 +51,9 @@ lerna-debug.log*
 .temp
 .tmp
 
+# Uploads (boletas de pago de ciudadanos - PII, NUNCA al repo)
+/uploads
+
 # Runtime data
 pids
 *.pid
