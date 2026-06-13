@@ -25,6 +25,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
       };
     }
 
+    // Archivo más grande que el limite de Multer
+    if (exception?.code === 'LIMIT_FILE_SIZE') {
+      status = HttpStatus.PAYLOAD_TOO_LARGE; // 413
+      message = {
+        message: `El archivo excede el tamaño máximo permitido (${process.env.MAX_FILE_SIZE_MB || 5}MB).`,
+        error: 'Payload Too Large',
+      };
+    }
+
     // Exclusion violation (23P01): el backstop de la BD rechazó un solapamiento 
     if (exception?.code === '23P01') {
       status = HttpStatus.CONFLICT;
