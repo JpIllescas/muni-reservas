@@ -7,7 +7,6 @@ import {
   UseInterceptors,
   UploadedFile,
   Body,
-  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PaymentsService } from './payments.service';
@@ -21,7 +20,7 @@ import { Role } from '../../common/enums/role.enum';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('payments')
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(private readonly paymentsService: PaymentsService) { }
 
   // POST /api/payments/:reservationId/voucher - El ciudadano sube su boleta
   @Post(':reservationId/voucher')
@@ -32,14 +31,6 @@ export class PaymentsController {
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: UploadVoucherDto,
   ) {
-    // Validación básica del tamaño del archivo (ej. 5MB)
-    const maxSize =
-      parseInt(process.env.MAX_FILE_SIZE_MB || '5', 10) * 1024 * 1024;
-    if (file && file.size > maxSize) {
-      throw new BadRequestException(
-        `El archivo excede el límite de ${process.env.MAX_FILE_SIZE_MB}MB.`,
-      );
-    }
 
     return this.paymentsService.uploadVoucher(
       reservationId,
