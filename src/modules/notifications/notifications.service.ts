@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
 import { Reservation } from '../reservations/entities/reservation.entity';
 import { User } from '../users/entities/user.entity';
@@ -7,7 +7,7 @@ import { User } from '../users/entities/user.entity';
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private readonly mailerService: MailerService) {}
+  constructor(private readonly mailerService: MailerService) { }
 
   async sendOtpEmail(to: string, fullName: string, code: string) {
     try {
@@ -24,7 +24,11 @@ export class NotificationsService {
       this.logger.log(`Correo OTP enviado exitosamente a: ${to}`);
     } catch (error) {
       this.logger.error(`Error al enviar correo OTP a ${to}:`, error);
-      // En desarrollo, no lanzamos excepcion para no bloquear si no hay internet
+      if (process.env.NODE_ENV === 'production') {
+        throw new ServiceUnavailableException(
+          'No pudimos enviar el código por correo. Intenta de nuevo en unos minutos.',
+        );
+      }
     }
   }
 
