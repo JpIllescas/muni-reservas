@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -11,7 +12,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 @Throttle({ default: { limit: 5, ttl: 60000 } })
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   // POST /auth/register
   @Post('register')
@@ -23,6 +24,12 @@ export class AuthController {
   @Post('verify-email')
   verifyEmail(@Body() dto: VerifyOtpDto) {
     return this.authService.verifyEmail(dto);
+  }
+
+  // POST /auth/resend-verification - reenviar el OTP de verificacion si vencio
+  @Post('resend-verification')
+  resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.authService.resendVerification(dto);
   }
 
   // POST /auth/login - 1er factor (email + contraseña), dispara el OTP

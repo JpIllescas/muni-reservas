@@ -10,6 +10,7 @@ import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
 
 import { User } from '../users/entities/user.entity';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { OtpCode } from './entities/otp-code.entity';
 import { RegisterDto } from './dto/register.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -86,6 +87,22 @@ export class AuthService {
     }
 
     return neutralResponse;
+  }
+
+  // Reenviar el OTP de verificacion si la cuenta existe y aun no esta verificada.
+  async resendVerification(dto: ResendVerificationDto) {
+    const user = await this.userRepository.findOne({
+      where: { email: dto.email },
+    });
+
+    if (user && !user.isEmailVerified) {
+      await this.createAndSendOtp(user, OtpPurpose.REGISTER);
+    }
+
+    return {
+      message:
+        'Si tu cuenta esta pendiente de verificación, recibirás un código nuevo.',
+    };
   }
 
   // El usuario ingresa el OTP que recibió (2do factor del login)

@@ -17,7 +17,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '../../common/enums/role.enum';
-import { ReservationStatus } from '../../common/enums/reservation-status.enum';
+import { FindReservationsDto } from './dto/find-reservations.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('reservations')
@@ -33,12 +33,8 @@ export class ReservationsController {
   // GET /api/reservations - admin y operador ven todas
   @Get()
   @Roles(Role.ADMIN, Role.OPERATOR)
-  findAll(
-    @Query('status') status?: ReservationStatus,
-    @Query('page') page: string = '1',
-    @Query('limit') limit: string = '10'
-  ) {
-    return this.reservationsService.findAll(status, +page, +limit);
+  findAll(@Query() dto: FindReservationsDto) {
+    return this.reservationsService.findAll(dto.status, dto.page, dto.limit);
   }
 
   // GET /api/reservations/my - el ciudadano ve sus propias reservas
