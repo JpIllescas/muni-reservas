@@ -17,6 +17,7 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,
     forbidNonWhitelisted: true,
+    transform: true,
   }));
 
   app.enableCors({
@@ -26,7 +27,10 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // 4. Escuchamos en el puerto que asigne AWS, o 3000 por defecto 
+  // Cierre ordenado: ante SIGTERM/SIGINT cierra conexiones de BD, crons, etc.
+  app.enableShutdownHooks();
+
+  // 4. Escuchamos en el puerto que asigne AWS, o 3000 por defecto
   await app.listen(process.env.PORT || 3000);
 }
 bootstrap();

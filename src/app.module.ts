@@ -28,6 +28,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ReportsModule } from './modules/reports/reports.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { ConfigDbModule } from './modules/config/config-db.module';
+import { HealthModule } from './modules/health/health.module';
 
 @Module({
   imports: [
@@ -91,6 +92,7 @@ import { ConfigDbModule } from './modules/config/config-db.module';
     ReportsModule,
     AuditModule,
     ConfigDbModule,
+    HealthModule,
   ],
   providers: [
     {
