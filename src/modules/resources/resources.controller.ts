@@ -7,7 +7,9 @@ import {
   Body,
   UseGuards,
   Delete,
+  Ip,
 } from '@nestjs/common';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ResourcesService } from './resources.service';
 import { CreateResourceDto } from './dto/create-resource.dto';
 import { UpdateResourceDto } from './dto/update-resource.dto';
@@ -19,7 +21,7 @@ import { Role } from '../../common/enums/role.enum';
 
 @Controller('resources')
 export class ResourcesController {
-  constructor(private readonly resourcesService: ResourcesService) {}
+  constructor(private readonly resourcesService: ResourcesService) { }
 
   // GET /api/resources — público, cualquiera puede ver el catálogo
   @Get()
@@ -45,33 +47,52 @@ export class ResourcesController {
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
-  create(@Body() dto: CreateResourceDto) {
-    return this.resourcesService.create(dto);
+  create(
+    @Body() dto: CreateResourceDto,
+    @CurrentUser() user: any,
+    @Ip() ip: string,
+  ) {
+    return this.resourcesService.create(dto, user.id, ip);
   }
 
   // PATCH /api/resources/:id — solo admin
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
-  update(@Param('id') id: string, @Body() dto: UpdateResourceDto) {
-    return this.resourcesService.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateResourceDto,
+    @CurrentUser() user: any,
+    @Ip() ip: string,
+  ) {
+    return this.resourcesService.update(id, dto, user.id, ip);
   }
 
   // PATCH /api/resources/:id/toggle-active — solo admin
   @Patch(':id/toggle-active')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
-  toggleActive(@Param('id') id: string) {
-    return this.resourcesService.toggleActive(id);
+  toggleActive(
+    @Param('id') id: string,
+    @CurrentUser() userInfo: any,
+    @Ip() ip: string
+  ) {
+    return this.resourcesService.toggleActive(id, userInfo.id, ip)
   }
 
   // POST /api/resources/:id/schedules — solo admin
   @Post(':id/schedules')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
-  addSchedule(@Param('id') id: string, @Body() dto: CreateScheduleDto) {
-    return this.resourcesService.addSchedule(id, dto);
+  addSchedule(
+    @Param('id') id: string,
+    @Body() dto: CreateScheduleDto,
+    @CurrentUser() user: any,
+    @Ip() ip: string,
+  ) {
+    return this.resourcesService.addSchedule(id, dto, user.id, ip)
   }
+
 
   // GET /api/resources/:id/schedules — público
   @Get(':id/schedules')
@@ -83,7 +104,11 @@ export class ResourcesController {
   @Delete('schedules/:scheduleId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN)
-  removeSchedule(@Param('scheduleId') scheduleId: string) {
-    return this.resourcesService.removeSchedule(scheduleId);
+  removeSchedule(
+    @Param('scheduleId') scheduleId: string,
+    @CurrentUser() user: any,
+    @Ip() ip: string,
+  ) {
+    return this.resourcesService.removeSchedule(scheduleId, user.id, ip);
   }
 }

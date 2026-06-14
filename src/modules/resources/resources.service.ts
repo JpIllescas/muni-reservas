@@ -6,6 +6,7 @@ import { ResourceSchedule } from './entities/resource-schedule.entity';
 import { CreateResourceDto } from './dto/create-resource.dto';
 import { UpdateResourceDto } from './dto/update-resource.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class ResourcesService {
@@ -15,12 +16,26 @@ export class ResourcesService {
 
     @InjectRepository(ResourceSchedule)
     private readonly scheduleRepository: Repository<ResourceSchedule>,
-  ) {}
+
+    private readonly auditService: AuditService,
+  ) { }
 
   // Crear un nuevo recurso (cancha o rancho)
-  async create(dto: CreateResourceDto) {
+  async create(dto: CreateResourceDto, performedById: string, ipAddress?: string) {
     const resource = this.resourceRepository.create(dto);
-    return this.resourceRepository.save(resource);
+    const saved = await this.resourceRepository.save(resource);
+
+    await this.auditService.createLog(
+      'Resource',
+      'CREATE',
+      performedById,
+      saved.id,
+      undefined,
+      { ...dto },
+      ipAddress,
+    );
+
+    return saved;
   }
 
   // Obtener todos los recursos activos — para el catálogo ciudadano
@@ -57,22 +72,54 @@ export class ResourcesService {
   }
 
   // Actualizar un recurso
-  async update(id: string, dto: UpdateResourceDto) {
+  async update(
+    id: string,
+    dto: UpdateResourceDto,
+    performedById: string,
+    ipAddress?: string,
+  ) {
     const resource = await this.findOne(id);
+
+    // snapshot del estado anterior
+    const { schedules, ...oldValue } = resource;
+
     Object.assign(resource, dto);
-    return this.resourceRepository.save(resource);
+    const saved = await this.resourceRepository.save(resource);
+
+    await this.auditService.createLog(
+      'Resource',
+      'UPDATE',
+      performedById,
+      id,
+      oldValue,
+      { ...dto },
+      ipAddress,
+    );
+
+    return saved;
   }
 
   // Activar o desactivar un recurso
-  async toggleActive(id: string) {
+  async toggleActive(id: string, performedById: string, ipAddress?: string) {
     const resource = await this.resourceRepository.findOne({ where: { id } });
 
     if (!resource) {
       throw new NotFoundException('Recurso no encontrado.');
     }
 
+    const oldValue = resource.isActive;
     resource.isActive = !resource.isActive;
     await this.resourceRepository.save(resource);
+
+    await this.auditService.createLog(
+      'Resource',
+      'TOGGLE_ACTIVE',
+      performedById,
+      id,
+      { isActive: oldValue },
+      { isActive: resource.isActive },
+      ipAddress,
+    );
 
     return {
       message: `Recurso ${resource.isActive ? 'activado' : 'desactivado'} correctamente.`,
@@ -80,7 +127,12 @@ export class ResourcesService {
   }
 
   // Agregar un horario a un recurso
-  async addSchedule(resourceId: string, dto: CreateScheduleDto) {
+  async addSchedule(
+    resourceId: string,
+    dto: CreateScheduleDto,
+    performedById: string,
+    ipAddress?: string,
+  ) {
     const resource = await this.resourceRepository.findOne({
       where: { id: resourceId },
     });
@@ -93,8 +145,19 @@ export class ResourcesService {
       ...dto,
       resourceId,
     });
+    const saved = await this.scheduleRepository.save(schedule);
 
-    return this.scheduleRepository.save(schedule);
+    await this.auditService.createLog(
+      'ResourceSchedule',
+      'ADD_SCHEDULE',
+      performedById,
+      saved.id,
+      undefined,
+      { ...dto, resourceId },
+      ipAddress,
+    );
+
+    return saved;
   }
 
   // Obtener los horarios de un recurso
@@ -106,7 +169,11 @@ export class ResourcesService {
   }
 
   // Desactivar un horario
-  async removeSchedule(scheduleId: string) {
+  async removeSchedule(
+    scheduleId: string,
+    performedById: string,
+    ipAddress?: string,
+  ) {
     const schedule = await this.scheduleRepository.findOne({
       where: { id: scheduleId },
     });
@@ -118,6 +185,15 @@ export class ResourcesService {
     schedule.isActive = false;
     await this.scheduleRepository.save(schedule);
 
+    await this.auditService.createLog(
+      'ResourceSchedule',
+      'REMOVE_SCHEDULE',
+      performedById,
+      scheduleId,
+      { isActive: true },
+      { isActive: false },
+      ipAddress,
+    );
     return { message: 'Horario eliminado correctamente.' };
   }
 }
