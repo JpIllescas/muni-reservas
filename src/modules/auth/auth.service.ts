@@ -2,10 +2,9 @@ import {
   Injectable,
   Logger,
   UnauthorizedException,
-  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, FindOptionsWhere } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcrypt';
@@ -34,17 +33,26 @@ export class AuthService {
 
     private readonly jwtService: JwtService,
     private readonly notificationsService: NotificationsService,
-  ) {}
+  ) { }
 
-  // Registro de nuevo usuario
+  // Registro de nuevo usuario.
+  // Anti-enumeración (#12): si el correo o el DPI ya existen NO creamos la cuenta,
+  // pero respondemos EXACTAMENTE igual que en un registro exitoso para no revelar
+  // qué cuentas existen.
   async register(dto: RegisterDto) {
-    // Verificar que el correo no esté registrado ya
-    const existing = await this.userRepository.findOne({
-      where: { email: dto.email },
-    });
+    const neutralResponse = {
+      message: 'Registro exitoso. Revisa tu correo para verificar tu cuenta.',
+    };
+
+    // Buscar duplicados por correo y, si vino, por DPI (ambos son únicos).
+    const orConditions: FindOptionsWhere<User>[] = [{ email: dto.email }];
+    if (dto.dpi) {
+      orConditions.push({ dpi: dto.dpi });
+    }
+    const existing = await this.userRepository.findOne({ where: orConditions });
 
     if (existing) {
-      throw new ConflictException('Este correo ya está registrado');
+      return neutralResponse;
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 12);
@@ -58,14 +66,26 @@ export class AuthService {
       isEmailVerified: false,
     });
 
-    await this.userRepository.save(user);
+    try {
+      await this.userRepository.save(user);
+    } catch (e: any) {
+      // Carrera: dos registros simultáneos del mismo correo/DPI. La unique
+      // constraint de la BD lo corta (23505); mantenemos la respuesta neutra.
+      if (e?.code === '23505') {
+        return neutralResponse;
+      }
+      throw e;
+    }
 
-    // Después del registro enviamos el OTP para verificar el correo
-    await this.createAndSendOtp(user, OtpPurpose.REGISTER);
+    try {
+      await this.createAndSendOtp(user, OtpPurpose.REGISTER);
+    } catch (e) {
+      await this.otpRepository.delete({ userId: user.id });
+      await this.userRepository.delete(user.id);
+      throw e;
+    }
 
-    return {
-      message: 'Registro exitoso. Revisa tu correo para verificar tu cuenta.',
-    };
+    return neutralResponse;
   }
 
   // El usuario ingresa el OTP que recibió (2do factor del login)
