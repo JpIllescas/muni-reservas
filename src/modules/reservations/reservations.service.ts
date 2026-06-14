@@ -19,6 +19,13 @@ import { Role } from '../../common/enums/role.enum';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../audit/audit.service';
+import { ResourceException } from '../resources/entities/resource-exception.entity';
+import {
+  guatemalaNow,
+  hhmmToMinutes,
+  addDaysToISODate,
+  dayOfWeekFromISODate,
+} from '../../common/utils/date.utils';
 
 @Injectable()
 export class ReservationsService {
@@ -66,30 +73,50 @@ export class ReservationsService {
         throw new NotFoundException('Recurso no encontrado o inactivo.');
       }
 
-      const [year, month, day] = dto.reservationDate.split('-');
-      const reservationDate = new Date(Number(year), Number(month) - 1, Number(day));
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const now = guatemalaNow();
 
-      if (reservationDate < today) {
+      if (dto.reservationDate < now.date) {
         throw new BadRequestException('No puedes reservar en una fecha pasada.');
       }
 
-      if (dto.reservationDate === new Date().toISOString().split('T')[0] && dto.startTime) {
-        const currentTime = new Date().toTimeString().substring(0, 5);
-        if (dto.startTime < currentTime) {
+      if (dto.reservationDate === now.date && dto.startTime) {
+        if (hhmmToMinutes(dto.startTime) < now.minutes) {
           throw new BadRequestException('La hora de inicio ya pasó el dia de hoy.');
         }
       }
 
-      const maxDate = new Date();
-      maxDate.setDate(maxDate.getDate() + resource.advanceDays);
-      maxDate.setHours(23, 59, 59, 999);
+      const maxDate = addDaysToISODate(now.date, resource.advanceDays);
 
-      if (reservationDate > maxDate) {
+      if (dto.reservationDate > maxDate) {
         throw new BadRequestException(
           `Solo puedes reservar con un máximo de ${resource.advanceDays} días de anticipación.`,
         );
+      }
+
+      // La fecha cae en una excepción (feriado / mantenimiento)
+      const exception = await manager.findOne(ResourceException, {
+        where: {
+          resourceId: dto.resourceId,
+          exceptionDate: dto.reservationDate as any,
+        },
+      });
+      if (exception) {
+        throw new BadRequestException(
+          `El recurso no está disponible esa fecha: ${exception.reason}.`,
+        );
+      }
+
+      // ¿Existe un horario activo para ese dia de la semana?
+      const dayOfWeek = dayOfWeekFromISODate(dto.reservationDate);
+      const schedule = await manager.findOne(ResourceSchedule, {
+        where: {
+          resourceId: dto.resourceId,
+          dayOfWeek,
+          isActive: true,
+        },
+      });
+      if (!schedule) {
+        throw new BadRequestException('El recurso no atiende ese dia.');
       }
 
       if (resource.type === ResourceType.COURT) {
@@ -101,6 +128,16 @@ export class ReservationsService {
         const end = new Date(`1970-01-01T${dto.endTime}:00Z`).getTime();
         if (start >= end) {
           throw new BadRequestException('La hora de inicio debe ser estrictamente anterior a la hora de fin.');
+        }
+
+        // La franja pedida debe caer dentro del horario de atención del día.
+        if (
+          hhmmToMinutes(dto.startTime) < hhmmToMinutes(schedule.openTime) ||
+          hhmmToMinutes(dto.endTime) > hhmmToMinutes(schedule.closeTime)
+        ) {
+          throw new BadRequestException(
+            `El horario debe estar entre ${schedule.openTime} y ${schedule.closeTime}.`,
+          );
         }
 
         const existingCourtReservation = await manager
