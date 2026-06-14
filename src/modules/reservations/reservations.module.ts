@@ -7,6 +7,7 @@ import { ReservationLog } from './entities/reservation-log.entity';
 import { Resource } from '../resources/entities/resource.entity';
 import { ResourceSchedule } from '../resources/entities/resource-schedule.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { ResourceException } from '../resources/entities/resource-exception.entity';
 
 @Module({
   // importacion de las entidades que el servicio de reservas utiliza
@@ -16,6 +17,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       ReservationLog,
       Resource,
       ResourceSchedule,
+      ResourceException,
     ]),
     NotificationsModule,
   ],
