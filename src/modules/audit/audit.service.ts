@@ -1,16 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditLog } from './entities/audit-log.entity';
 
 @Injectable()
 export class AuditService {
+  private readonly logger = new Logger(AuditService.name);
+
   constructor(
     @InjectRepository(AuditLog)
     private readonly auditRepository: Repository<AuditLog>,
   ) {}
 
-  // Metoo que usaran los otroso modulso para registrar acciones (sin bloquear su ejecucion)
+  // Método que usan los otros módulos para registrar acciones. Es "best-effort":
+  // un fallo al auditar NO debe tumbar la operación principal (que ya se ejecutó
+  // fuera de esta llamada). Se registra el error en el log del servidor para no
+  // perderlo del todo.
   async createLog(
     entityType: string,
     action: string,
@@ -30,9 +35,15 @@ export class AuditService {
       ipAddress,
     });
 
-    // Lo guardamos de manera asincrona. si falla por algún motivo.
-    // el proceso principal, para eso usamos un try chat silencioso o lo dejamos a simple
-    return this.auditRepository.save(log);
+    try {
+      return await this.auditRepository.save(log);
+    } catch (error) {
+      this.logger.error(
+        `No se pudo guardar el audit log (${entityType}/${action}, entityId=${entityId}).`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      return null;
+    }
   }
 
   // Metodo para que el administrador vea todo el historial de cambios

@@ -17,10 +17,12 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
+    "test:db:setup": "ts-node -r tsconfig-paths/register test/setup-test-db.ts",
     "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js",
     "migration:generate": "npm run typeorm -- migration:generate -d src/config/data-source.ts src/migrations/UpdateDB",
     "migration:run": "npm run typeorm -- migration:run -d src/config/data-source.ts",
+    "migration:run:test": "npm run typeorm -- migration:run -d test/test-data-source.ts",
     "migration:revert": "npm run typeorm -- migration:revert -d src/config/data-source.ts"
   },
   "dependencies": {
@@ -42,7 +44,6 @@
     "joi": "^18.2.1",
     "multer": "^2.1.1",
     "nodemailer": "^8.0.4",
-    "otplib": "^13.4.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.20.0",

@@ -7,11 +7,11 @@ import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { Payment } from './entities/payment.entity';
 import { Reservation } from '../reservations/entities/reservation.entity';
-import { ReservationLog } from '../reservations/entities/reservation-log.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, Reservation, ReservationLog]),
+    // ReservationLog se escribe vía el manager de la transacción (conexión global).
+    TypeOrmModule.forFeature([Payment, Reservation]),
 
     // Configuracion de Multer para guardar las boletas en la carpeta definida en .env
     MulterModule.registerAsync({

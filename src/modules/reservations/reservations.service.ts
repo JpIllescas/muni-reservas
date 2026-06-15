@@ -13,7 +13,11 @@ import { Payment } from '../payments/entities/payment.entity';
 import { ResourceSchedule } from '../resources/entities/resource-schedule.entity';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationStatusDto } from './dto/update-reservation-status.dto';
-import { ReservationStatus } from '../../common/enums/reservation-status.enum';
+import {
+  ReservationStatus,
+  INACTIVE_RESERVATION_STATUSES,
+  NON_CANCELLABLE_RESERVATION_STATUSES,
+} from '../../common/enums/reservation-status.enum';
 import { ResourceType } from '../../common/enums/resource-type.enum';
 import { Role } from '../../common/enums/role.enum';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -44,12 +48,6 @@ export class ReservationsService {
 
     @InjectRepository(ReservationLog)
     private readonly logRepository: Repository<ReservationLog>,
-
-    @InjectRepository(Resource)
-    private readonly resourceRepository: Repository<Resource>,
-
-    @InjectRepository(ResourceSchedule)
-    private readonly scheduleRepository: Repository<ResourceSchedule>,
 
     private readonly auditService: AuditService,
 
@@ -124,9 +122,9 @@ export class ReservationsService {
           throw new BadRequestException('Para canchas debes especificar hora de inicio y fin.');
         }
 
-        const start = new Date(`1970-01-01T${dto.startTime}:00Z`).getTime();
-        const end = new Date(`1970-01-01T${dto.endTime}:00Z`).getTime();
-        if (start >= end) {
+        // Comparamos por minutos (no con new Date): así "9:00" (una cifra,
+        // permitido por el regex del DTO) se evalúa bien y no da NaN.
+        if (hhmmToMinutes(dto.startTime) >= hhmmToMinutes(dto.endTime)) {
           throw new BadRequestException('La hora de inicio debe ser estrictamente anterior a la hora de fin.');
         }
 
@@ -140,6 +138,16 @@ export class ReservationsService {
           );
         }
 
+        // Candado consultivo por (usuario, fecha): serializa los creates
+        // concurrentes del MISMO usuario para el MISMO día, aunque sean canchas
+        // distintas. Sin esto, el chequeo "1 cancha/usuario/día" se puede saltar
+        // con dos peticiones en paralelo (cada una bloquea un Resource distinto).
+        // Es a nivel de transacción: se suelta solo al hacer commit o rollback.
+        await manager.query(
+          'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+          [userId, dto.reservationDate],
+        );
+
         const existingCourtReservation = await manager
           .createQueryBuilder(Reservation, 'r')
           .innerJoin('r.resource', 'res')
@@ -147,7 +155,7 @@ export class ReservationsService {
           .andWhere('r.reservationDate = :date', { date: dto.reservationDate })
           .andWhere('res.type = :type', { type: ResourceType.COURT })
           .andWhere('r.status NOT IN (:...statuses)', {
-            statuses: [ReservationStatus.CANCELLED, ReservationStatus.EXPIRED, ReservationStatus.REJECTED],
+            statuses: INACTIVE_RESERVATION_STATUSES,
           })
           .getOne();
 
@@ -162,7 +170,7 @@ export class ReservationsService {
           .andWhere('r.startTime < :endTime', { endTime: dto.endTime })
           .andWhere('r.endTime > :startTime', { startTime: dto.startTime })
           .andWhere('r.status NOT IN (:...statuses)', {
-            statuses: [ReservationStatus.CANCELLED, ReservationStatus.EXPIRED, ReservationStatus.REJECTED],
+            statuses: INACTIVE_RESERVATION_STATUSES,
           })
           .getOne();
 
@@ -176,7 +184,7 @@ export class ReservationsService {
           where: {
             resourceId: dto.resourceId,
             reservationDate: dto.reservationDate,
-            status: Not(In([ReservationStatus.CANCELLED, ReservationStatus.EXPIRED, ReservationStatus.REJECTED])),
+            status: Not(In(INACTIVE_RESERVATION_STATUSES)),
           },
         });
 
@@ -191,12 +199,17 @@ export class ReservationsService {
         paymentDeadline.setHours(paymentDeadline.getHours() + 24);
       }
 
+      const startTime =
+        resource.type === ResourceType.COURT ? (dto.startTime ?? null) : null;
+      const endTime =
+        resource.type === ResourceType.COURT ? (dto.endTime ?? null) : null;
+
       const reservation = manager.create(Reservation, {
         userId,
         resourceId: dto.resourceId,
         reservationDate: dto.reservationDate,
-        startTime: dto.startTime ?? null,
-        endTime: dto.endTime ?? null,
+        startTime,
+        endTime,
         status: ReservationStatus.PENDING_PAYMENT,
         paymentDeadline,
       });
@@ -379,14 +392,7 @@ export class ReservationsService {
       throw new NotFoundException('Reserva no encontrada.');
     }
 
-    if (
-      [
-        ReservationStatus.APPROVED,
-        ReservationStatus.CANCELLED,
-        ReservationStatus.EXPIRED,
-        ReservationStatus.REJECTED,
-      ].includes(reservation.status)
-    ) {
+    if (NON_CANCELLABLE_RESERVATION_STATUSES.includes(reservation.status)) {
       throw new BadRequestException('Esta reserva no puede ser cancelada.');
     }
 
@@ -408,38 +414,43 @@ export class ReservationsService {
   // Job que expira reservas con payment_deadline vencido
   @Cron(CronExpression.EVERY_5_MINUTES)
   async expireOverdueReservations() {
-    const result = await this.reservationRepository
-      .createQueryBuilder()
-      .update(Reservation)
-      .set({ status: ReservationStatus.EXPIRED })
-      .where('status = :status', {
-        status: ReservationStatus.PENDING_PAYMENT,
-      })
-      .andWhere('paymentDeadline IS NOT NULL')
-      .andWhere('paymentDeadline < :now', { now: new Date() })
-      .returning(['id'])
-      .execute();
+    // UPDATE + logs en una sola transacción: o se expiran las reservas Y se
+    // escriben sus logs, o no pasa nada. Antes el log iba fuera del UPDATE y un
+    // fallo dejaba reservas EXPIRED sin rastro.
+    return this.dataSource.transaction(async (manager) => {
+      const result = await manager
+        .createQueryBuilder()
+        .update(Reservation)
+        .set({ status: ReservationStatus.EXPIRED })
+        .where('status = :status', {
+          status: ReservationStatus.PENDING_PAYMENT,
+        })
+        .andWhere('paymentDeadline IS NOT NULL')
+        .andWhere('paymentDeadline < :now', { now: new Date() })
+        .returning(['id'])
+        .execute();
 
-    const expiredIds: string[] = result.raw.map((r: { id: string }) => r.id);
+      const expiredIds: string[] = result.raw.map((r: { id: string }) => r.id);
 
-    if (expiredIds.length === 0) {
-      return 0;
-    }
+      if (expiredIds.length === 0) {
+        return 0;
+      }
 
-    // Dejar rastro en el LOG para cada reserva expirada
-    const logs = expiredIds.map((id) => {
-      const log = new ReservationLog();
-      log.reservationId = id;
-      log.fromStatus = ReservationStatus.PENDING_PAYMENT;
-      log.toStatus = ReservationStatus.EXPIRED;
-      log.changedById = null;
-      log.reason = 'Expirada automaticamente por vencimiento de plazo de pago'
-      return log;
+      // Dejar rastro en el LOG para cada reserva expirada
+      const logs = expiredIds.map((id) => {
+        const log = new ReservationLog();
+        log.reservationId = id;
+        log.fromStatus = ReservationStatus.PENDING_PAYMENT;
+        log.toStatus = ReservationStatus.EXPIRED;
+        log.changedById = null;
+        log.reason = 'Expirada automaticamente por vencimiento de plazo de pago';
+        return log;
+      });
+
+      await manager.save(logs);
+
+      return expiredIds.length;
     });
-
-    await this.logRepository.save(logs);
-
-    return expiredIds.length;
   }
 
 }

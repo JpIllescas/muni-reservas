@@ -53,6 +53,10 @@ export class AuthService {
     const existing = await this.userRepository.findOne({ where: orConditions });
 
     if (existing) {
+      // Igualar el tiempo de respuesta con el camino "usuario nuevo" (que sí
+      // ejecuta bcrypt.hash). Sin esto, la diferencia de latencia revela si el
+      // correo/DPI ya existe, anulando la respuesta neutra anti-enumeración.
+      await bcrypt.hash(dto.password, 12);
       return neutralResponse;
     }
 
@@ -273,8 +277,10 @@ export class AuthService {
       { used: true },
     );
 
-    // Generar código de 6 dígitos
-    const code = crypto.randomInt(100000, 1000000).toString();
+    // Generar código de 6 dígitos. Usamos el rango completo [0, 1000000) y
+    // rellenamos con ceros a la izquierda: así "001234" también es válido y el
+    // espacio de búsqueda es el millón completo (no 900k).
+    const code = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
 
     // En desarrollo logueamos el OTP para poder probar sin depender del correo
     if (process.env.NODE_ENV !== 'production') {

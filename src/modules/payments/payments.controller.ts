@@ -7,7 +7,9 @@ import {
   UseInterceptors,
   UploadedFile,
   Body,
+  StreamableFile,
 } from '@nestjs/common';
+import { createReadStream } from 'fs';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PaymentsService } from './payments.service';
 import { UploadVoucherDto } from './dto/upload-voucher.dto';
@@ -16,6 +18,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '../../common/enums/role.enum';
+import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('payments')
@@ -27,7 +30,7 @@ export class PaymentsController {
   @UseInterceptors(FileInterceptor('voucher')) // 'voucher' es el nombre del campo en el form-data
   uploadVoucher(
     @Param('reservationId') reservationId: string,
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthUser,
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: UploadVoucherDto,
   ) {
@@ -44,12 +47,31 @@ export class PaymentsController {
   @Get('reservation/:reservationId')
   getPaymentDetails(
     @Param('reservationId') reservationId: string,
-    @CurrentUser() user: any, //saber quien hace la peticion
+    @CurrentUser() user: AuthUser, //saber quien hace la peticion
   ) {
     return this.paymentsService.getPaymentByReservation(
       reservationId,
       user.id,
       user.role,
     );
+  }
+
+  // GET /api/payments/reservation/:reservationId/voucher - Ver/descargar la boleta
+  @Get('reservation/:reservationId/voucher')
+  async getVoucherFile(
+    @Param('reservationId') reservationId: string,
+    @CurrentUser() user: AuthUser,
+  ): Promise<StreamableFile> {
+    const { path, contentType, fileName } =
+      await this.paymentsService.getVoucherFile(
+        reservationId,
+        user.id,
+        user.role,
+      );
+
+    return new StreamableFile(createReadStream(path), {
+      type: contentType,
+      disposition: `inline; filename="${fileName}"`,
+    });
   }
 }
