@@ -15,6 +15,7 @@ import { PaymentMethod } from '../../common/enums/payment-method.enum';
 import { Role } from '../../common/enums/role.enum';
 import { UploadVoucherDto } from './dto/upload-voucher.dto';
 import { promises as fs } from 'fs';
+import { resolve, sep } from 'path';
 import { detectFileType } from '../../common/utils/file-signature.utils';
 
 @Injectable()
@@ -25,9 +26,6 @@ export class PaymentsService {
 
     @InjectRepository(Reservation)
     private readonly reservationRepository: Repository<Reservation>,
-
-    @InjectRepository(ReservationLog)
-    private readonly LogRepository: Repository<ReservationLog>,
 
     private readonly dataSource: DataSource,
   ) { }
@@ -139,5 +137,53 @@ export class PaymentsService {
     }
 
     return payment;
+  }
+
+  // Develve la ruta fisica + metadatos de la boleta, ya autorizada.
+  async getVoucherFile(
+    reservationId: string,
+    userId: string,
+    userRole: Role,
+  ) {
+    const payment = await this.getPaymentByReservation(
+      reservationId,
+      userId,
+      userRole,
+    );
+
+    if (!payment.voucherPath) {
+      throw new NotFoundException('Esta reserva no tiene una boleta adjunta.');
+    }
+
+    const uploadsDir = resolve(process.env.UPLOAD_PATH || './uploads');
+    const absPath = resolve(payment.voucherPath);
+    if (!absPath.startsWith(uploadsDir + sep)) {
+      throw new NotFoundException('Boleta no encontrada.');
+    }
+
+    // ¿Sigue el archivo en disco?
+    try {
+      await fs.access(absPath);
+    } catch {
+      throw new NotFoundException('El archivo de la boleta ya no está disponible.');
+    }
+
+    // Content-type por magic bytes 
+    const realType = await detectFileType(absPath);
+    const contentType =
+      realType === 'pdf'
+        ? 'application/pdf'
+        : realType === 'png'
+          ? 'image/png'
+          : realType === 'jpg'
+            ? 'image/jpeg'
+            : 'application/octet-stream';
+
+    const fileName = (payment.voucherOriginalName || 'boleta').replace(
+      /[^\w.\- ]/g,
+      '_',
+    );
+
+    return { path: absPath, contentType, fileName };
   }
 }

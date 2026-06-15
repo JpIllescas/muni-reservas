@@ -7,6 +7,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '../../common/enums/role.enum';
+import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
@@ -22,7 +23,7 @@ export class UsersController {
 
   // GET /api/users/me - cualquier usuario autenticado ve su propio perfil
   @Get('me')
-  getProfile(@CurrentUser() user: any) {
+  getProfile(@CurrentUser() user: AuthUser) {
     return this.usersService.findOne(user.id);
   }
 
@@ -35,7 +36,7 @@ export class UsersController {
 
   // PATCH /api/isers/me - el ciudadano actualiza su propio perfil
   @Patch('me')
-  updateProfile(@CurrentUser() user: any, @Body() dto: UpdateUserDto) {
+  updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateUserDto) {
     return this.usersService.updateProfile(user.id, dto);
   }
 
@@ -45,7 +46,7 @@ export class UsersController {
   updateRole(
     @Param('id') id: string,
     @Body() dto: UpdateRoleDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthUser,
     @Ip() ip: string,
   ) {
     return this.usersService.updateRole(id, dto, user.id, ip);
@@ -56,7 +57,7 @@ export class UsersController {
   @Roles(Role.ADMIN)
   toggleActive(
     @Param('id') id: string,
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthUser,
     @Ip() ip: string,
   ) {
     return this.usersService.toggleActive(id, user.id, ip);

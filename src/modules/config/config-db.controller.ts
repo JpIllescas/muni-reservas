@@ -6,6 +6,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '../../common/enums/role.enum';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('system-config')
@@ -32,7 +33,7 @@ export class ConfigDbController {
   update(
     @Param('key') key: string,
     @Body() dto: UpdateConfigDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthUser,
   ) {
     return this.configDbService.update(key, dto, user.id);
   }

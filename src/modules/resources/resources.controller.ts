@@ -18,6 +18,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role } from '../../common/enums/role.enum';
+import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 
 @Controller('resources')
 export class ResourcesController {
@@ -49,7 +50,7 @@ export class ResourcesController {
   @Roles(Role.ADMIN)
   create(
     @Body() dto: CreateResourceDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthUser,
     @Ip() ip: string,
   ) {
     return this.resourcesService.create(dto, user.id, ip);
@@ -62,7 +63,7 @@ export class ResourcesController {
   update(
     @Param('id') id: string,
     @Body() dto: UpdateResourceDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthUser,
     @Ip() ip: string,
   ) {
     return this.resourcesService.update(id, dto, user.id, ip);
@@ -74,7 +75,7 @@ export class ResourcesController {
   @Roles(Role.ADMIN)
   toggleActive(
     @Param('id') id: string,
-    @CurrentUser() userInfo: any,
+    @CurrentUser() userInfo: AuthUser,
     @Ip() ip: string
   ) {
     return this.resourcesService.toggleActive(id, userInfo.id, ip)
@@ -87,7 +88,7 @@ export class ResourcesController {
   addSchedule(
     @Param('id') id: string,
     @Body() dto: CreateScheduleDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthUser,
     @Ip() ip: string,
   ) {
     return this.resourcesService.addSchedule(id, dto, user.id, ip)
@@ -106,7 +107,7 @@ export class ResourcesController {
   @Roles(Role.ADMIN)
   removeSchedule(
     @Param('scheduleId') scheduleId: string,
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthUser,
     @Ip() ip: string,
   ) {
     return this.resourcesService.removeSchedule(scheduleId, user.id, ip);

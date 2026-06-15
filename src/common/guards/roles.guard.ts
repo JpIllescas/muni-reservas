@@ -17,6 +17,14 @@ export class RolesGuard implements CanActivate {
     }
 
     const { user } = context.switchToHttp().getRequest();
+
+    // Defensa: si por algún motivo no hay usuario en la request (p. ej. una ruta
+    // con @Roles a la que se le olvidó poner JwtAuthGuard), negamos en vez de
+    // reventar con un 500 al leer user.role.
+    if (!user) {
+      return false;
+    }
+
     return requiredRoles.includes(user.role);
   }
 }

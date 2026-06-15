@@ -24,7 +24,13 @@ import { NotificationsModule } from '../notifications/notifications.module';
         return {
           secret,
           signOptions: {
-            expiresIn: 604800,
+            // Antes estaba hardcodeado en 604800 (7d). Ahora respeta la variable
+            // de entorno JWT_EXPIRES_IN (exigida por Joi), p. ej. "7d". El cast
+            // es porque jsonwebtoken tipa expiresIn como el literal StringValue
+            // de `ms`, no como un string genérico.
+            expiresIn: configService.get<string>(
+              'JWT_EXPIRES_IN',
+            ) as import('ms').StringValue,
           },
         };
       },

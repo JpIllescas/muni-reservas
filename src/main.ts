@@ -23,7 +23,7 @@ async function bootstrap() {
   app.enableCors({
     // 3. URL del frontend desde variables de entorno 
     origin: process.env.FRONTEND_URL || 'http://localhost:4200',
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    methods: 'GET,HEAD,PATCH,POST,DELETE',
     credentials: true,
   });
 

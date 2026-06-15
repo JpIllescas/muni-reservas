@@ -17,6 +17,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '../../common/enums/role.enum';
+import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { FindReservationsDto } from './dto/find-reservations.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -26,7 +27,7 @@ export class ReservationsController {
 
   // POST /api/reservations - cualquier usuario autenticado
   @Post()
-  create(@CurrentUser() user: any, @Body() dto: CreateReservationDto) {
+  create(@CurrentUser() user: AuthUser, @Body() dto: CreateReservationDto) {
     return this.reservationsService.create(user.id, dto);
   }
 
@@ -39,13 +40,13 @@ export class ReservationsController {
 
   // GET /api/reservations/my - el ciudadano ve sus propias reservas
   @Get('my')
-  findMyReservations(@CurrentUser() user: any) {
+  findMyReservations(@CurrentUser() user: AuthUser) {
     return this.reservationsService.findMyReservations(user.id);
   }
 
   // GET /api/reservations/:id - detalle de una reserva
   @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.reservationsService.findOne(id, user.id, user.role);
   }
 
@@ -55,7 +56,7 @@ export class ReservationsController {
   updateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateReservationStatusDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: AuthUser,
     @Ip() ip: string,
   ) {
     return this.reservationsService.updateStatus(id, dto, user.id, ip);
@@ -63,7 +64,7 @@ export class ReservationsController {
 
   // PATCH /api/reservations/:id/cancel - el ciudadadno cancela su reserva
   @Patch(':id/cancel')
-  cancel(@Param('id') id: string, @CurrentUser() user: any) {
+  cancel(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.reservationsService.cancel(id, user.id);
   }
 }
