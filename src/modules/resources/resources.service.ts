@@ -1,12 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Not, In } from 'typeorm';
 import { Resource } from './entities/resource.entity';
 import { ResourceSchedule } from './entities/resource-schedule.entity';
+import { ResourceException } from './entities/resource-exception.entity';
+import { Reservation } from '../reservations/entities/reservation.entity';
 import { CreateResourceDto } from './dto/create-resource.dto';
 import { UpdateResourceDto } from './dto/update-resource.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { AuditService } from '../audit/audit.service';
+import { ResourceType } from '../../common/enums/resource-type.enum';
+import { INACTIVE_RESERVATION_STATUSES } from '../../common/enums/reservation-status.enum';
+import { dayOfWeekFromISODate } from '../../common/utils/date.utils';
 
 @Injectable()
 export class ResourcesService {
@@ -16,6 +21,12 @@ export class ResourcesService {
 
     @InjectRepository(ResourceSchedule)
     private readonly scheduleRepository: Repository<ResourceSchedule>,
+
+    @InjectRepository(ResourceException)
+    private readonly exceptionRepository: Repository<ResourceException>,
+
+    @InjectRepository(Reservation)
+    private readonly reservationRepository: Repository<Reservation>,
 
     private readonly auditService: AuditService,
   ) { }
@@ -69,6 +80,79 @@ export class ResourcesService {
     });
 
     return { ...resource, schedules };
+  }
+
+  // Disponibilidad de un recurso en una fecha concreta. Read-only: entrega los
+  // datos crudos para que el frontend pinte el desplegable (no decide la UI):
+  // horario del día, tope de duración y franjas ya ocupadas. La fecha llega
+  // validada como YYYY-MM-DD por el DTO.
+  async getAvailability(resourceId: string, date: string) {
+    const resource = await this.resourceRepository.findOne({
+      where: { id: resourceId, isActive: true },
+    });
+
+    if (!resource) {
+      throw new NotFoundException('Recurso no encontrado o inactivo.');
+    }
+
+    // ¿La fecha cae en una excepción (feriado / mantenimiento)?
+    const exception = await this.exceptionRepository.findOne({
+      where: { resourceId, exceptionDate: date as any },
+    });
+
+    // Horario activo para ese día de la semana (0=domingo..6=sábado).
+    const dayOfWeek = dayOfWeekFromISODate(date);
+    const schedule = exception
+      ? null
+      : await this.scheduleRepository.findOne({
+          where: { resourceId, dayOfWeek, isActive: true },
+        });
+
+    // Reservas vivas de ese recurso/fecha (las mismas que ocupan el slot en create()).
+    const reservations = await this.reservationRepository.find({
+      where: {
+        resourceId,
+        reservationDate: date,
+        status: Not(In(INACTIVE_RESERVATION_STATUSES)),
+      },
+      order: { startTime: 'ASC' },
+    });
+
+    // Cerrado: hay excepción o el recurso no atiende ese día.
+    const closed = !!exception || !schedule;
+
+    const base = {
+      resourceId,
+      date,
+      type: resource.type,
+      closed,
+      reason: exception ? exception.reason : null,
+    };
+
+    // Rancho: día completo. Solo interesa si el día está libre o tomado.
+    if (resource.type === ResourceType.RANCH) {
+      return {
+        ...base,
+        available: !closed && reservations.length === 0,
+      };
+    }
+
+    // Cancha: el front necesita la ventana, el granulado, el tope y lo ocupado.
+    return {
+      ...base,
+      maxDurationMinutes: resource.maxDurationMinutes,
+      schedule: schedule
+        ? {
+            openTime: schedule.openTime,
+            closeTime: schedule.closeTime,
+            slotDurationMin: schedule.slotDurationMin,
+          }
+        : null,
+      occupied: reservations.map((r) => ({
+        startTime: r.startTime,
+        endTime: r.endTime,
+      })),
+    };
   }
 
   // Actualizar un recurso

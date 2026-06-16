@@ -8,12 +8,14 @@ import {
   UseGuards,
   Delete,
   Ip,
+  Query,
 } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ResourcesService } from './resources.service';
 import { CreateResourceDto } from './dto/create-resource.dto';
 import { UpdateResourceDto } from './dto/update-resource.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
+import { AvailabilityQueryDto } from './dto/availability-query.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -42,6 +44,16 @@ export class ResourcesController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.resourcesService.findOne(id);
+  }
+
+  // GET /api/resources/:id/availability?date=YYYY-MM-DD — público
+  // Disponibilidad del recurso ese día (horario, tope y franjas ocupadas).
+  @Get(':id/availability')
+  getAvailability(
+    @Param('id') id: string,
+    @Query() query: AvailabilityQueryDto,
+  ) {
+    return this.resourcesService.getAvailability(id, query.date);
   }
 
   // POST /api/resources — solo admin

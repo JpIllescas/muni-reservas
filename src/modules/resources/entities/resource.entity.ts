@@ -36,6 +36,10 @@ export class Resource {
   @Column({ name: 'advance_days', default: 7 })
   advanceDays: number;
 
+  // Tope de duración por reserva (solo aplica a canchas/COURT). null = sin tope.
+  @Column({ name: 'max_duration_minutes', type: 'int', nullable: true, default: 180 })
+  maxDurationMinutes: number | null;
+
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 

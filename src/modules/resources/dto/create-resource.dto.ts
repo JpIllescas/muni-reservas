@@ -1,5 +1,6 @@
 import {
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -42,4 +43,10 @@ export class CreateResourceDto {
   @IsNumber()
   @Min(1)
   advanceDays: number;
+
+  // Tope de duración por reserva en minutos (solo canchas). Ej. 180 = 3 h.
+  @IsOptional()
+  @IsInt()
+  @Min(30)
+  maxDurationMinutes?: number;
 }
