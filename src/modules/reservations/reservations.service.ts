@@ -128,6 +128,17 @@ export class ReservationsService {
           throw new BadRequestException('La hora de inicio debe ser estrictamente anterior a la hora de fin.');
         }
 
+        const durationMinutes =
+          hhmmToMinutes(dto.endTime) - hhmmToMinutes(dto.startTime);
+        if (
+          resource.maxDurationMinutes &&
+          durationMinutes > resource.maxDurationMinutes
+        ) {
+          throw new BadRequestException(
+            `La duración máxima por reserva es de ${resource.maxDurationMinutes} minutos.`,
+          );
+        }
+
         // La franja pedida debe caer dentro del horario de atención del día.
         if (
           hhmmToMinutes(dto.startTime) < hhmmToMinutes(schedule.openTime) ||
