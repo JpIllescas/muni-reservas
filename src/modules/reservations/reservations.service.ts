@@ -255,6 +255,12 @@ export class ReservationsService {
       .createQueryBuilder('r')
       .leftJoinAndSelect('r.resource', 'resource')
       .leftJoinAndSelect('r.user', 'user')
+      .loadRelationCountAndMap(
+        'r.voucherCount',
+        'r.payments',
+        'p',
+        (qb) => qb.where('p.voucherPath IS NOT NULL'),
+      )
       .orderBy('r.createdAt', 'DESC');
 
     if (status) {

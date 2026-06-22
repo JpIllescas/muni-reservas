@@ -5,11 +5,13 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   ManyToOne,
+  OneToMany,
   JoinColumn,
   Index,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Resource } from '../../resources/entities/resource.entity';
+import { Payment } from '../../payments/entities/payment.entity';
 import { ReservationStatus } from '../../../common/enums/reservation-status.enum';
 
 @Entity('reservations')
@@ -33,6 +35,9 @@ export class Reservation {
 
   @Column({ name: 'resource_id' })
   resourceId: string;
+
+  @OneToMany(() => Payment, (payment) => payment.reservation)
+  payments: Payment[];
 
   @Column({ name: 'reservation_date', type: 'date' })
   reservationDate: string;
