@@ -6,6 +6,7 @@ import { testDataSourceOptions } from '../test-data-source';
 import { ReservationsService } from '../../src/modules/reservations/reservations.service';
 import { PaymentsService } from '../../src/modules/payments/payments.service';
 import { ResourcesService } from '../../src/modules/resources/resources.service';
+import { SedesService } from '../../src/modules/sedes/sedes.service';
 import { AuditService } from '../../src/modules/audit/audit.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 
@@ -16,6 +17,7 @@ import { Sede } from '../../src/modules/resources/entities/sede.entity';
 import { ResourceSchedule } from '../../src/modules/resources/entities/resource-schedule.entity';
 import { ResourceException } from '../../src/modules/resources/entities/resource-exception.entity';
 import { Payment } from '../../src/modules/payments/entities/payment.entity';
+import { User } from '../../src/modules/users/entities/user.entity';
 import { AuditLog } from '../../src/modules/audit/entities/audit-log.entity';
 
 // Mock no-op de notificaciones: los tests NO deben tocar el servidor SMTP.
@@ -37,6 +39,7 @@ export async function createTestModule(): Promise<TestingModule> {
         ResourceSchedule,
         ResourceException,
         Payment,
+        User,
         AuditLog,
       ]),
     ],
@@ -44,6 +47,7 @@ export async function createTestModule(): Promise<TestingModule> {
       ReservationsService,
       PaymentsService,
       ResourcesService,
+      SedesService,
       AuditService,
       { provide: NotificationsService, useValue: notificationsMock },
     ],
