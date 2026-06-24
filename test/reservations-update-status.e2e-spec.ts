@@ -21,6 +21,7 @@ import {
   createCourtResource,
   createReservation,
   createPayment,
+  asAuthUser,
 } from './utils/fixtures';
 
 // Test #2 — MÁQUINA DE ESTADOS de updateStatus().
@@ -62,7 +63,11 @@ describe('updateStatus — máquina de estados (e2e, BD real)', () => {
     });
 
     await expect(
-      service.updateStatus(r.id, statusDto(ReservationStatus.APPROVED), admin.id),
+      service.updateStatus(
+        r.id,
+        statusDto(ReservationStatus.APPROVED),
+        asAuthUser(admin, { isSuperAdmin: true }),
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     // El estado sigue intacto y NO se creó log.
@@ -89,7 +94,11 @@ describe('updateStatus — máquina de estados (e2e, BD real)', () => {
     });
 
     await expect(
-      service.updateStatus(r.id, statusDto(ReservationStatus.APPROVED), admin.id),
+      service.updateStatus(
+        r.id,
+        statusDto(ReservationStatus.APPROVED),
+        asAuthUser(admin, { isSuperAdmin: true }),
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     const updated = await ds.getRepository(Reservation).findOneBy({ id: r.id });
@@ -114,7 +123,7 @@ describe('updateStatus — máquina de estados (e2e, BD real)', () => {
     const result = await service.updateStatus(
       r.id,
       statusDto(ReservationStatus.APPROVED),
-      admin.id,
+      asAuthUser(admin, { isSuperAdmin: true }),
     );
     expect(result?.status).toBe(ReservationStatus.APPROVED);
 

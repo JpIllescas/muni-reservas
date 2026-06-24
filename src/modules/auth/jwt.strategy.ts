@@ -29,8 +29,12 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   }
 
   async validate(payload: any) {
+    // Se cargan las sedes del actor (ADM-1) para acotar el alcance admin/operador.
+    // Va contra la BD en cada request (no en el JWT), así la asignación de sedes
+    // queda fresca aunque el token dure 7 días.
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
+      relations: ['sedes'],
     });
 
     if (!user || !user.isActive) {
@@ -42,6 +46,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       email: user.email,
       role: user.role,
       fullName: user.fullName,
+      isSuperAdmin: user.isSuperAdmin,
+      sedeIds: (user.sedes ?? []).map((s) => s.id),
     };
   }
 }

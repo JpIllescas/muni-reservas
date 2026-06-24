@@ -17,6 +17,8 @@ import { UploadVoucherDto } from './dto/upload-voucher.dto';
 import { promises as fs } from 'fs';
 import { resolve, sep } from 'path';
 import { detectFileType } from '../../common/utils/file-signature.utils';
+import type { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { assertSedeAccess } from '../../common/utils/sede-scope.util';
 
 @Injectable()
 export class PaymentsService {
@@ -103,25 +105,27 @@ export class PaymentsService {
     }
   }
 
-  async getPaymentByReservation(
-    reservationId: string,
-    userId: string,
-    userRole: Role,
-  ) {
-    // 1. Primero buscamos la reserva para verificar quién es el dueño
+  async getPaymentByReservation(reservationId: string, user: AuthUser) {
+    // 1. Buscamos la reserva (con su recurso) para verificar la autorización.
     const reservation = await this.reservationRepository.findOne({
       where: { id: reservationId },
+      relations: ['resource'],
     });
 
     if (!reservation) {
       throw new NotFoundException('Reserva no encontrada.');
     }
 
-    // 2. Verificamos si el usuario es un ciudadano y si está intentando ver una reserva que no es suya
-    if (userRole === Role.CITIZEN && reservation.userId !== userId) {
-      throw new ForbiddenException(
-        'No tienes permiso para ver los detalles de pago de esta reserva.',
-      );
+    // 2. Autorización: el ciudadano solo ve la suya; admin/operador solo las de
+    //    sus sedes (ADM-1); el super-admin, cualquiera.
+    if (user.role === Role.CITIZEN) {
+      if (reservation.userId !== user.id) {
+        throw new ForbiddenException(
+          'No tienes permiso para ver los detalles de pago de esta reserva.',
+        );
+      }
+    } else {
+      assertSedeAccess(user, reservation.resource.sedeId);
     }
 
     // 3. Si pasó la seguridad, buscamos el pago
@@ -140,16 +144,8 @@ export class PaymentsService {
   }
 
   // Develve la ruta fisica + metadatos de la boleta, ya autorizada.
-  async getVoucherFile(
-    reservationId: string,
-    userId: string,
-    userRole: Role,
-  ) {
-    const payment = await this.getPaymentByReservation(
-      reservationId,
-      userId,
-      userRole,
-    );
+  async getVoucherFile(reservationId: string, user: AuthUser) {
+    const payment = await this.getPaymentByReservation(reservationId, user);
 
     if (!payment.voucherPath) {
       throw new NotFoundException('Esta reserva no tiene una boleta adjunta.');

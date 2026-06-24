@@ -5,8 +5,11 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
+  ManyToMany,
+  JoinTable,
 } from 'typeorm';
 import { Role } from '../../../common/enums/role.enum';
+import { Sede } from '../../resources/entities/sede.entity';
 
 @Entity('users')
 export class User {
@@ -36,6 +39,22 @@ export class User {
 
   @Column({ type: 'enum', enum: Role, default: Role.CITIZEN })
   role: Role;
+
+  // Super-admin (ADM-1/ADM-2): un ADMIN con este flag saltea el filtro de sede
+  // (ve y gestiona todas las sedes; puede crear sedes y asignar admins). Los
+  // demás admins/operadores se acotan a sus sedes (M2M abajo). Fail-closed: un
+  // admin/operador SIN sedes y sin este flag no ve nada.
+  @Column({ name: 'is_super_admin', default: false })
+  isSuperAdmin: boolean;
+
+  // Sedes que este admin/operador puede gestionar (ADM-1). Vacío para ciudadanos.
+  @ManyToMany(() => Sede)
+  @JoinTable({
+    name: 'user_sedes',
+    joinColumn: { name: 'user_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'sede_id', referencedColumnName: 'id' },
+  })
+  sedes: Sede[];
 
   @Column({ name: 'is_active', default: true })
   isActive: boolean;

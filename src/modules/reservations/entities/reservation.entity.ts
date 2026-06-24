@@ -42,6 +42,21 @@ export class Reservation {
   @Column({ name: 'reservation_date', type: 'date' })
   reservationDate: string;
 
+  // Monto total calculado y persistido en el BACKEND (ARQ-1). El frontend solo
+  // lo muestra; nunca lo calcula. Las columnas decimal de Postgres vuelven como
+  // string en TypeORM, por eso el transformer las convierte a number al leer.
+  @Column({
+    name: 'total_amount',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string) => parseFloat(value),
+    },
+  })
+  totalAmount: number;
+
   // En ranchos estos dos campos son null porque es dia completo
   @Column({ name: 'start_time', type: 'time', nullable: true })
   startTime: string | null;

@@ -5,6 +5,8 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
+  Max,
   Min,
 } from 'class-validator';
 import { ResourceType } from '../../../common/enums/resource-type.enum';
@@ -13,6 +15,12 @@ export class CreateResourceDto {
   @IsNotEmpty()
   @IsString()
   name: string;
+
+  // Sede a la que pertenece el recurso (ADM-1, NOT NULL). El admin solo puede
+  // crear en sus propias sedes; el super-admin, en cualquiera (se valida en el servicio).
+  @IsNotEmpty()
+  @IsUUID()
+  sedeId: string;
 
   @IsOptional()
   @IsString()
@@ -49,4 +57,11 @@ export class CreateResourceDto {
   @IsInt()
   @Min(30)
   maxDurationMinutes?: number;
+
+  // Ventana de pago en horas (solo canchas). Default 24 si se omite. Ej. 2 = 2 h.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(72)
+  paymentWindowHours?: number;
 }

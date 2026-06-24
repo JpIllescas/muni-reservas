@@ -1,6 +1,8 @@
 import { DataSource } from 'typeorm';
 import { User } from '../../src/modules/users/entities/user.entity';
 import { Resource } from '../../src/modules/resources/entities/resource.entity';
+import { Sede } from '../../src/modules/resources/entities/sede.entity';
+import type { AuthUser } from '../../src/common/interfaces/auth-user.interface';
 import { ResourceSchedule } from '../../src/modules/resources/entities/resource-schedule.entity';
 import { Reservation } from '../../src/modules/reservations/entities/reservation.entity';
 import { Payment } from '../../src/modules/payments/entities/payment.entity';
@@ -30,18 +32,53 @@ export async function createUser(
   return repo.save(user);
 }
 
+// Construye el AuthUser que los controladores inyectarían (ADM-1): lo que el
+// servicio consume para acotar por sede. Por defecto sin sedes y sin flag.
+export function asAuthUser(
+  user: User,
+  overrides: Partial<AuthUser> = {},
+): AuthUser {
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    fullName: user.fullName,
+    isSuperAdmin: user.isSuperAdmin ?? false,
+    sedeIds: [],
+    ...overrides,
+  };
+}
+
+// Sede mínima válida (ADM-1).
+export async function createSede(
+  ds: DataSource,
+  overrides: Partial<Sede> = {},
+): Promise<Sede> {
+  seq += 1;
+  const repo = ds.getRepository(Sede);
+  const sede = repo.create({
+    name: `Sede ${seq}.${Date.now()}`,
+    isActive: true,
+    ...overrides,
+  });
+  return repo.save(sede);
+}
+
 export async function createCourtResource(
   ds: DataSource,
   overrides: Partial<Resource> = {},
 ): Promise<Resource> {
   seq += 1;
   const repo = ds.getRepository(Resource);
+  // sede_id es NOT NULL (ADM-1): si el test no fija una sede, se crea una.
+  const sedeId = overrides.sedeId ?? (await createSede(ds)).id;
   const resource = repo.create({
     name: `Cancha ${seq}`,
     type: ResourceType.COURT,
     pricePerUnit: 50,
     advanceDays: 7,
     isActive: true,
+    sedeId,
     ...overrides,
   });
   return repo.save(resource);
@@ -53,12 +90,15 @@ export async function createRanchResource(
 ): Promise<Resource> {
   seq += 1;
   const repo = ds.getRepository(Resource);
+  // sede_id es NOT NULL (ADM-1): si el test no fija una sede, se crea una.
+  const sedeId = overrides.sedeId ?? (await createSede(ds)).id;
   const resource = repo.create({
     name: `Rancho ${seq}`,
     type: ResourceType.RANCH,
     pricePerUnit: 300,
     advanceDays: 30,
     isActive: true,
+    sedeId,
     ...overrides,
   });
   return repo.save(resource);
@@ -96,6 +136,9 @@ export async function createReservation(
     startTime: null,
     endTime: null,
     paymentDeadline: null,
+    // total_amount es NOT NULL (ARQ-1). Estos tests no asertan sobre el monto
+    // (validan estados/locks/constraints), así que 0 basta; se puede override.
+    totalAmount: 0,
     ...data,
   });
   return repo.save(reservation);

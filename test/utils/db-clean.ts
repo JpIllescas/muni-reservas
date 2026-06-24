@@ -18,6 +18,8 @@ export async function cleanDatabase(ds: DataSource): Promise<void> {
         resource_exceptions,
         resource_schedules,
         resources,
+        user_sedes,
+        sedes,
         otp_codes,
         audit_logs,
         users
