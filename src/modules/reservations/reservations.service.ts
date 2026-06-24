@@ -202,7 +202,9 @@ export class ReservationsService {
       }
 
       let paymentDeadline: Date | null = null;
-      if (resource.type === ResourceType.COURT) {
+      // Solo hay ventana de pago (y auto-expiración) si el recurso exige boleta
+      // (FLO-1) y cobra por hora (cancha). Confirmación por llamada → sin deadline.
+      if (resource.type === ResourceType.COURT && resource.requiresVoucher) {
         // POL-1: la ventana de pago es configurable por recurso (antes 24h fijas).
         paymentDeadline = new Date();
         paymentDeadline.setHours(
@@ -360,26 +362,39 @@ export class ReservationsService {
           throw new NotFoundException('Reserva no encontrada.');
         }
 
+        // Se carga el recurso siempre: para el chequeo de sede (ADM-1) y para
+        // saber si exige boleta (FLO-1). La FK garantiza que existe.
+        const resource = await manager.findOne(Resource, {
+          where: { id: found.resourceId },
+        });
+
         // Admin/operador solo gestiona reservas de recursos de sus sedes (ADM-1).
         if (!user.isSuperAdmin) {
-          const resource = await manager.findOne(Resource, {
-            where: { id: found.resourceId },
-          });
           assertSedeAccess(user, resource!.sedeId);
         }
 
         const fromStatus = found.status;
 
         // 1. Validar la transición contra la máquina de estados.
+        //    FLO-1: un recurso de confirmación por llamada (requiresVoucher=false)
+        //    puede aprobarse directo desde pending_payment, sin pasar por revisión.
         const allowed = this.allowedTransitions[fromStatus] ?? [];
-        if (!allowed.includes(dto.status)) {
+        const approveWithoutVoucher =
+          !resource!.requiresVoucher &&
+          fromStatus === ReservationStatus.PENDING_PAYMENT &&
+          dto.status === ReservationStatus.APPROVED;
+
+        if (!allowed.includes(dto.status) && !approveWithoutVoucher) {
           throw new BadRequestException(
             `Transición inválida: no se puede pasar una reserva de "${fromStatus}" a "${dto.status}".`,
           );
         }
 
-        // 2. Aprobar exige un pago registrado.
-        if (dto.status === ReservationStatus.APPROVED) {
+        // 2. Aprobar exige un pago registrado SOLO si el recurso pide boleta (FLO-1).
+        if (
+          dto.status === ReservationStatus.APPROVED &&
+          resource!.requiresVoucher
+        ) {
           const payment = await manager.findOne(Payment, {
             where: { reservationId: id },
           });
