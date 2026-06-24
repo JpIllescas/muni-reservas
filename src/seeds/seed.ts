@@ -58,6 +58,7 @@ const RESOURCES: Partial<Resource>[] = [
     type: ResourceType.RANCH,
     location: 'Florencia',
     sedeId: SEDE_FLORENCIA_ID,
+    requiresVoucher: false, // FLO-1: Florencia confirma por llamada, sin boleta
     capacity: 50,
     pricePerUnit: 500.0,
     rules:

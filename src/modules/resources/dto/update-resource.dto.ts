@@ -52,6 +52,11 @@ export class UpdateResourceDto {
   @Max(72)
   paymentWindowHours?: number;
 
+  // FLO-1: ¿exige boleta para aprobar? false = confirmación por llamada.
+  @IsOptional()
+  @IsBoolean()
+  requiresVoucher?: boolean;
+
   @IsOptional()
   @IsBoolean()
   isActive: boolean;

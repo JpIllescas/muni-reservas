@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -64,4 +65,9 @@ export class CreateResourceDto {
   @Min(1)
   @Max(72)
   paymentWindowHours?: number;
+
+  // FLO-1: ¿exige boleta para aprobar? Default true. false = confirmación por llamada.
+  @IsOptional()
+  @IsBoolean()
+  requiresVoucher?: boolean;
 }

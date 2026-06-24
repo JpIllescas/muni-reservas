@@ -72,6 +72,12 @@ export class Resource {
   @Column({ name: 'payment_window_hours', type: 'int', default: 24 })
   paymentWindowHours: number;
 
+  // FLO-1: ¿exige boleta de pago para aprobar? true (default) = flujo normal
+  // (subir boleta → revisión → aprobar). false = confirmación por llamada
+  // (Florencia): el admin aprueba directo sin boleta y la reserva no auto-expira.
+  @Column({ name: 'requires_voucher', default: true })
+  requiresVoucher: boolean;
+
   @Column({ name: 'is_active', default: true })
   isActive: boolean;
 
