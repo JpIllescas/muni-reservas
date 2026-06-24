@@ -31,11 +31,11 @@ export class ReservationsController {
     return this.reservationsService.create(user.id, dto);
   }
 
-  // GET /api/reservations - admin y operador ven todas
+  // GET /api/reservations - admin y operador ven las reservas de sus sedes
   @Get()
   @Roles(Role.ADMIN, Role.OPERATOR)
-  findAll(@Query() dto: FindReservationsDto) {
-    return this.reservationsService.findAll(dto.status, dto.page, dto.limit);
+  findAll(@CurrentUser() user: AuthUser, @Query() dto: FindReservationsDto) {
+    return this.reservationsService.findAll(user, dto.status, dto.page, dto.limit);
   }
 
   // GET /api/reservations/my - el ciudadano ve sus propias reservas
@@ -47,7 +47,7 @@ export class ReservationsController {
   // GET /api/reservations/:id - detalle de una reserva
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.reservationsService.findOne(id, user.id, user.role);
+    return this.reservationsService.findOne(id, user);
   }
 
   // PATCH /api/reservations/:id/status - admin y operador
@@ -59,7 +59,7 @@ export class ReservationsController {
     @CurrentUser() user: AuthUser,
     @Ip() ip: string,
   ) {
-    return this.reservationsService.updateStatus(id, dto, user.id, ip);
+    return this.reservationsService.updateStatus(id, dto, user, ip);
   }
 
   // PATCH /api/reservations/:id/cancel - el ciudadadno cancela su reserva

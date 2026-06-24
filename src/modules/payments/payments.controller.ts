@@ -49,11 +49,7 @@ export class PaymentsController {
     @Param('reservationId') reservationId: string,
     @CurrentUser() user: AuthUser, //saber quien hace la peticion
   ) {
-    return this.paymentsService.getPaymentByReservation(
-      reservationId,
-      user.id,
-      user.role,
-    );
+    return this.paymentsService.getPaymentByReservation(reservationId, user);
   }
 
   // GET /api/payments/reservation/:reservationId/voucher - Ver/descargar la boleta
@@ -63,11 +59,7 @@ export class PaymentsController {
     @CurrentUser() user: AuthUser,
   ): Promise<StreamableFile> {
     const { path, contentType, fileName } =
-      await this.paymentsService.getVoucherFile(
-        reservationId,
-        user.id,
-        user.role,
-      );
+      await this.paymentsService.getVoucherFile(reservationId, user);
 
     return new StreamableFile(createReadStream(path), {
       type: contentType,

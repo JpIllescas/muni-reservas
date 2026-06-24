@@ -32,12 +32,12 @@ export class ResourcesController {
     return this.resourcesService.findAll();
   }
 
-  // GET /api/resources/admin — solo admin y operador
+  // GET /api/resources/admin — solo admin y operador (recursos de sus sedes)
   @Get('admin')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.OPERATOR)
-  findAllAdmin() {
-    return this.resourcesService.findAllAdmin();
+  findAllAdmin(@CurrentUser() user: AuthUser) {
+    return this.resourcesService.findAllAdmin(user);
   }
 
   // GET /api/resources/:id — público
@@ -65,7 +65,7 @@ export class ResourcesController {
     @CurrentUser() user: AuthUser,
     @Ip() ip: string,
   ) {
-    return this.resourcesService.create(dto, user.id, ip);
+    return this.resourcesService.create(dto, user, ip);
   }
 
   // PATCH /api/resources/:id — solo admin
@@ -78,7 +78,7 @@ export class ResourcesController {
     @CurrentUser() user: AuthUser,
     @Ip() ip: string,
   ) {
-    return this.resourcesService.update(id, dto, user.id, ip);
+    return this.resourcesService.update(id, dto, user, ip);
   }
 
   // PATCH /api/resources/:id/toggle-active — solo admin
@@ -90,7 +90,7 @@ export class ResourcesController {
     @CurrentUser() userInfo: AuthUser,
     @Ip() ip: string
   ) {
-    return this.resourcesService.toggleActive(id, userInfo.id, ip)
+    return this.resourcesService.toggleActive(id, userInfo, ip)
   }
 
   // POST /api/resources/:id/schedules — solo admin
@@ -103,7 +103,7 @@ export class ResourcesController {
     @CurrentUser() user: AuthUser,
     @Ip() ip: string,
   ) {
-    return this.resourcesService.addSchedule(id, dto, user.id, ip)
+    return this.resourcesService.addSchedule(id, dto, user, ip)
   }
 
 
@@ -122,6 +122,6 @@ export class ResourcesController {
     @CurrentUser() user: AuthUser,
     @Ip() ip: string,
   ) {
-    return this.resourcesService.removeSchedule(scheduleId, user.id, ip);
+    return this.resourcesService.removeSchedule(scheduleId, user, ip);
   }
 }

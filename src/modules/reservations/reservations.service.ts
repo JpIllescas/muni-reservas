@@ -30,6 +30,8 @@ import {
   addDaysToISODate,
   dayOfWeekFromISODate,
 } from '../../common/utils/date.utils';
+import type { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { assertSedeAccess } from '../../common/utils/sede-scope.util';
 
 @Injectable()
 export class ReservationsService {
@@ -149,11 +151,6 @@ export class ReservationsService {
           );
         }
 
-        // Candado consultivo por (usuario, fecha): serializa los creates
-        // concurrentes del MISMO usuario para el MISMO día, aunque sean canchas
-        // distintas. Sin esto, el chequeo "1 cancha/usuario/día" se puede saltar
-        // con dos peticiones en paralelo (cada una bloquea un Resource distinto).
-        // Es a nivel de transacción: se suelta solo al hacer commit o rollback.
         await manager.query(
           'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
           [userId, dto.reservationDate],
@@ -206,14 +203,26 @@ export class ReservationsService {
 
       let paymentDeadline: Date | null = null;
       if (resource.type === ResourceType.COURT) {
+        // POL-1: la ventana de pago es configurable por recurso (antes 24h fijas).
         paymentDeadline = new Date();
-        paymentDeadline.setHours(paymentDeadline.getHours() + 24);
+        paymentDeadline.setHours(
+          paymentDeadline.getHours() + resource.paymentWindowHours,
+        );
       }
 
       const startTime =
         resource.type === ResourceType.COURT ? (dto.startTime ?? null) : null;
       const endTime =
         resource.type === ResourceType.COURT ? (dto.endTime ?? null) : null;
+
+      let totalAmount: number;
+      if (resource.type === ResourceType.COURT) {
+        const durationHours =
+          (hhmmToMinutes(dto.endTime!) - hhmmToMinutes(dto.startTime!)) / 60;
+        totalAmount = Number(resource.pricePerUnit) * durationHours;
+      } else {
+        totalAmount = Number(resource.pricePerUnit); // rancho = día completo
+      }
 
       const reservation = manager.create(Reservation, {
         userId,
@@ -223,6 +232,7 @@ export class ReservationsService {
         endTime,
         status: ReservationStatus.PENDING_PAYMENT,
         paymentDeadline,
+        totalAmount,
       });
 
       const saved = await manager.save(reservation);
@@ -249,8 +259,21 @@ export class ReservationsService {
     });
   }
 
-  // Admin y operador ven todas las reservas
-  async findAll(status?: ReservationStatus, page: number = 1, limit: number = 10) {
+  // Admin y operador ven las reservas de SUS sedes (ADM-1). El super-admin ve todas.
+  async findAll(
+    user: AuthUser,
+    status?: ReservationStatus,
+    page: number = 1,
+    limit: number = 10,
+  ) {
+    // Fail-closed: admin/operador sin sedes asignadas (y sin flag) no ve nada.
+    if (!user.isSuperAdmin && user.sedeIds.length === 0) {
+      return {
+        data: [],
+        meta: { total: 0, page, limit, totalPages: 0 },
+      };
+    }
+
     const query = this.reservationRepository
       .createQueryBuilder('r')
       .leftJoinAndSelect('r.resource', 'resource')
@@ -264,7 +287,14 @@ export class ReservationsService {
       .orderBy('r.createdAt', 'DESC');
 
     if (status) {
-      query.where('r.status = :status', { status });
+      query.andWhere('r.status = :status', { status });
+    }
+
+    // Acotar por sede salvo super-admin.
+    if (!user.isSuperAdmin) {
+      query.andWhere('resource.sedeId IN (:...sedeIds)', {
+        sedeIds: user.sedeIds,
+      });
     }
 
     // Calcular cuantos registros saltar segun la pagina
@@ -288,7 +318,7 @@ export class ReservationsService {
   }
 
   // Ver detalle de una reserva
-  async findOne(id: string, userId: string, userRole: Role) {
+  async findOne(id: string, user: AuthUser) {
     const reservation = await this.reservationRepository.findOne({
       where: { id },
       relations: ['resource', 'user'],
@@ -298,9 +328,14 @@ export class ReservationsService {
       throw new NotFoundException('Reserva no encontrada.');
     }
 
-    // El ciudadano solo puede ver sus propias reservas
-    if (userRole === Role.CITIZEN && reservation.userId !== userId) {
-      throw new ForbiddenException('No tienes permiso para ver esta reserva.');
+    // El ciudadano solo puede ver sus propias reservas.
+    if (user.role === Role.CITIZEN) {
+      if (reservation.userId !== user.id) {
+        throw new ForbiddenException('No tienes permiso para ver esta reserva.');
+      }
+    } else {
+      // Admin/operador: solo reservas de recursos de sus sedes (ADM-1).
+      assertSedeAccess(user, reservation.resource.sedeId);
     }
 
     return reservation;
@@ -310,9 +345,10 @@ export class ReservationsService {
   async updateStatus(
     id: string,
     dto: UpdateReservationStatusDto,
-    changedById: string,
+    user: AuthUser,
     ipAddress?: string,
   ) {
+    const changedById = user.id;
     const { reservation, fromStatus } = await this.dataSource.transaction(
       async (manager) => {
         const found = await manager.findOne(Reservation, {
@@ -322,6 +358,14 @@ export class ReservationsService {
 
         if (!found) {
           throw new NotFoundException('Reserva no encontrada.');
+        }
+
+        // Admin/operador solo gestiona reservas de recursos de sus sedes (ADM-1).
+        if (!user.isSuperAdmin) {
+          const resource = await manager.findOne(Resource, {
+            where: { id: found.resourceId },
+          });
+          assertSedeAccess(user, resource!.sedeId);
         }
 
         const fromStatus = found.status;

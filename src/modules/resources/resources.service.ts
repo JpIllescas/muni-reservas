@@ -1,7 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Not, In } from 'typeorm';
 import { Resource } from './entities/resource.entity';
+import { Sede } from './entities/sede.entity';
 import { ResourceSchedule } from './entities/resource-schedule.entity';
 import { ResourceException } from './entities/resource-exception.entity';
 import { Reservation } from '../reservations/entities/reservation.entity';
@@ -12,12 +17,17 @@ import { AuditService } from '../audit/audit.service';
 import { ResourceType } from '../../common/enums/resource-type.enum';
 import { INACTIVE_RESERVATION_STATUSES } from '../../common/enums/reservation-status.enum';
 import { dayOfWeekFromISODate } from '../../common/utils/date.utils';
+import type { AuthUser } from '../../common/interfaces/auth-user.interface';
+import { assertSedeAccess } from '../../common/utils/sede-scope.util';
 
 @Injectable()
 export class ResourcesService {
   constructor(
     @InjectRepository(Resource)
     private readonly resourceRepository: Repository<Resource>,
+
+    @InjectRepository(Sede)
+    private readonly sedeRepository: Repository<Sede>,
 
     @InjectRepository(ResourceSchedule)
     private readonly scheduleRepository: Repository<ResourceSchedule>,
@@ -32,14 +42,23 @@ export class ResourcesService {
   ) { }
 
   // Crear un nuevo recurso (cancha o rancho)
-  async create(dto: CreateResourceDto, performedById: string, ipAddress?: string) {
+  async create(dto: CreateResourceDto, user: AuthUser, ipAddress?: string) {
+    // ADM-1: el admin solo crea en sus sedes; el super-admin en cualquiera.
+    assertSedeAccess(user, dto.sedeId);
+
+    // La sede debe existir (el FK lo impediría igual, pero damos error claro).
+    const sede = await this.sedeRepository.findOne({ where: { id: dto.sedeId } });
+    if (!sede) {
+      throw new BadRequestException('La sede indicada no existe.');
+    }
+
     const resource = this.resourceRepository.create(dto);
     const saved = await this.resourceRepository.save(resource);
 
     await this.auditService.createLog(
       'Resource',
       'CREATE',
-      performedById,
+      user.id,
       saved.id,
       undefined,
       { ...dto },
@@ -57,9 +76,17 @@ export class ResourcesService {
     });
   }
 
-  // Obtener todos los recursos incluyendo inactivos — para el panel admin
-  async findAllAdmin() {
+  // Obtener los recursos (incluye inactivos) de las sedes del actor — panel admin.
+  // El super-admin ve todos; el resto solo los de sus sedes (ADM-1). Fail-closed.
+  async findAllAdmin(user: AuthUser) {
+    if (user.isSuperAdmin) {
+      return this.resourceRepository.find({ order: { name: 'ASC' } });
+    }
+    if (user.sedeIds.length === 0) {
+      return [];
+    }
     return this.resourceRepository.find({
+      where: { sedeId: In(user.sedeIds) },
       order: { name: 'ASC' },
     });
   }
@@ -159,10 +186,13 @@ export class ResourcesService {
   async update(
     id: string,
     dto: UpdateResourceDto,
-    performedById: string,
+    user: AuthUser,
     ipAddress?: string,
   ) {
     const resource = await this.findOne(id);
+
+    // ADM-1: solo recursos de las sedes del actor.
+    assertSedeAccess(user, resource.sedeId);
 
     // snapshot del estado anterior
     const { schedules, ...oldValue } = resource;
@@ -173,7 +203,7 @@ export class ResourcesService {
     await this.auditService.createLog(
       'Resource',
       'UPDATE',
-      performedById,
+      user.id,
       id,
       oldValue,
       { ...dto },
@@ -184,12 +214,15 @@ export class ResourcesService {
   }
 
   // Activar o desactivar un recurso
-  async toggleActive(id: string, performedById: string, ipAddress?: string) {
+  async toggleActive(id: string, user: AuthUser, ipAddress?: string) {
     const resource = await this.resourceRepository.findOne({ where: { id } });
 
     if (!resource) {
       throw new NotFoundException('Recurso no encontrado.');
     }
+
+    // ADM-1: solo recursos de las sedes del actor.
+    assertSedeAccess(user, resource.sedeId);
 
     const oldValue = resource.isActive;
     resource.isActive = !resource.isActive;
@@ -198,7 +231,7 @@ export class ResourcesService {
     await this.auditService.createLog(
       'Resource',
       'TOGGLE_ACTIVE',
-      performedById,
+      user.id,
       id,
       { isActive: oldValue },
       { isActive: resource.isActive },
@@ -214,7 +247,7 @@ export class ResourcesService {
   async addSchedule(
     resourceId: string,
     dto: CreateScheduleDto,
-    performedById: string,
+    user: AuthUser,
     ipAddress?: string,
   ) {
     const resource = await this.resourceRepository.findOne({
@@ -225,6 +258,9 @@ export class ResourcesService {
       throw new NotFoundException('Recurso no encontrado.');
     }
 
+    // ADM-1: solo recursos de las sedes del actor.
+    assertSedeAccess(user, resource.sedeId);
+
     const schedule = this.scheduleRepository.create({
       ...dto,
       resourceId,
@@ -234,7 +270,7 @@ export class ResourcesService {
     await this.auditService.createLog(
       'ResourceSchedule',
       'ADD_SCHEDULE',
-      performedById,
+      user.id,
       saved.id,
       undefined,
       { ...dto, resourceId },
@@ -255,7 +291,7 @@ export class ResourcesService {
   // Desactivar un horario
   async removeSchedule(
     scheduleId: string,
-    performedById: string,
+    user: AuthUser,
     ipAddress?: string,
   ) {
     const schedule = await this.scheduleRepository.findOne({
@@ -266,13 +302,19 @@ export class ResourcesService {
       throw new NotFoundException('Horario no encontrado.');
     }
 
+    // ADM-1: el horario pertenece a un recurso → acotar por su sede.
+    const resource = await this.resourceRepository.findOne({
+      where: { id: schedule.resourceId },
+    });
+    assertSedeAccess(user, resource!.sedeId);
+
     schedule.isActive = false;
     await this.scheduleRepository.save(schedule);
 
     await this.auditService.createLog(
       'ResourceSchedule',
       'REMOVE_SCHEDULE',
-      performedById,
+      user.id,
       scheduleId,
       { isActive: true },
       { isActive: false },

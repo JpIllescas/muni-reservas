@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsString,
   IsBoolean,
+  Max,
   Min,
 } from 'class-validator';
 
@@ -43,6 +44,13 @@ export class UpdateResourceDto {
   @IsInt()
   @Min(30)
   maxDurationMinutes?: number;
+
+  // Ventana de pago en horas (solo canchas). Ej. 2 = 2 h.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(72)
+  paymentWindowHours?: number;
 
   @IsOptional()
   @IsBoolean()

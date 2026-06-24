@@ -18,6 +18,7 @@ import * as bcrypt from 'bcrypt';
 import AppDataSource from '../config/data-source';
 import { Resource } from '../modules/resources/entities/resource.entity';
 import { ResourceSchedule } from '../modules/resources/entities/resource-schedule.entity';
+import { Sede } from '../modules/resources/entities/sede.entity';
 import { User } from '../modules/users/entities/user.entity';
 import { ResourceType } from '../common/enums/resource-type.enum';
 import { Role } from '../common/enums/role.enum';
@@ -27,6 +28,15 @@ import { Role } from '../common/enums/role.enum';
 const COURT_ID = '57be2613-e4b6-4c81-872c-d765149cd412';
 const RANCH_ID = '46f3083e-eb4b-4eae-82cc-a857137996de';
 
+// Sedes reales (ADM-1). Mismos UUID que la migración de Sede.
+const SEDE_POLVORA_ID = '11111111-1111-4111-8111-111111111111';
+const SEDE_FLORENCIA_ID = '22222222-2222-4222-8222-222222222222';
+
+const SEDES: Partial<Sede>[] = [
+  { id: SEDE_POLVORA_ID, name: 'Complejo Deportivo La Pólvora', address: 'La Antigua Guatemala' },
+  { id: SEDE_FLORENCIA_ID, name: 'Parque Ecológico Florencia', address: 'La Antigua Guatemala' },
+];
+
 const RESOURCES: Partial<Resource>[] = [
   {
     id: COURT_ID,
@@ -34,6 +44,7 @@ const RESOURCES: Partial<Resource>[] = [
     description: 'Cancha de fútbol de grama sintética',
     type: ResourceType.COURT,
     location: 'Complejo Deportivo La Pólvora',
+    sedeId: SEDE_POLVORA_ID,
     capacity: 22,
     pricePerUnit: 75.0,
     rules: 'Máximo 1 reserva por día por usuario. Presentarse 10 minutos antes.',
@@ -46,6 +57,7 @@ const RESOURCES: Partial<Resource>[] = [
     description: 'Rancho para eventos privados con capacidad para 50 personas',
     type: ResourceType.RANCH,
     location: 'Florencia',
+    sedeId: SEDE_FLORENCIA_ID,
     capacity: 50,
     pricePerUnit: 500.0,
     rules:
@@ -66,6 +78,19 @@ const SCHEDULES: Record<string, SeedSchedule> = {
   [COURT_ID]: { openTime: '07:00:00', closeTime: '21:00:00', slotDurationMin: 60 },
   [RANCH_ID]: { openTime: '08:00:00', closeTime: '17:00:00', slotDurationMin: null },
 };
+
+async function seedSedes(): Promise<void> {
+  const repo = AppDataSource.getRepository(Sede);
+  for (const data of SEDES) {
+    const exists = await repo.findOne({ where: { id: data.id } });
+    if (exists) {
+      console.log(`  · Sede ya existe, omitida: ${data.name}`);
+      continue;
+    }
+    await repo.save(repo.create(data));
+    console.log(`  ✓ Sede creada: ${data.name}`);
+  }
+}
 
 async function seedResources(): Promise<void> {
   const repo = AppDataSource.getRepository(Resource);
@@ -121,6 +146,7 @@ async function seedAdmin(): Promise<void> {
       email,
       password: hash,
       role: Role.ADMIN,
+      isSuperAdmin: true, // dev admin = super-admin: ve todas las sedes y puede crear/asignar
       isEmailVerified: true, // ya verificado: entra sin OTP de registro
       isActive: true,
     }),
@@ -132,6 +158,7 @@ async function run(): Promise<void> {
   await AppDataSource.initialize();
   console.log('Sembrando datos...');
   try {
+    await seedSedes();
     await seedResources();
     await seedSchedules();
     await seedAdmin();
