@@ -30,6 +30,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { ConfigDbModule } from './modules/config/config-db.module';
 import { HealthModule } from './modules/health/health.module';
+import { SedesModule } from './modules/sedes/sedes.module';
 
 @Module({
   imports: [
@@ -95,6 +96,7 @@ import { HealthModule } from './modules/health/health.module';
     AuditModule,
     ConfigDbModule,
     HealthModule,
+    SedesModule,
   ],
   providers: [
     {
