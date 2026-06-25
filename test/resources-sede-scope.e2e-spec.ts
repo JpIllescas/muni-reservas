@@ -84,10 +84,7 @@ describe('Recursos — alcance por sede (e2e, BD real)', () => {
     const auth = asAuthUser(boss, { isSuperAdmin: true });
 
     await expect(
-      resources.create(
-        courtDto('99999999-9999-4999-8999-999999999999'),
-        auth,
-      ),
+      resources.create(courtDto('99999999-9999-4999-8999-999999999999'), auth),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 

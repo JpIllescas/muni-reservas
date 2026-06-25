@@ -1,4 +1,12 @@
-import { Controller, Get, Patch, Param, Body, UseGuards, Ip } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Param,
+  Body,
+  UseGuards,
+  Ip,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
@@ -12,7 +20,7 @@ import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) { }
+  constructor(private readonly usersService: UsersService) {}
 
   // GET /api/users - Solo admin
   @Get()

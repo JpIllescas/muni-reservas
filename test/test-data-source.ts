@@ -20,7 +20,9 @@ function toTestUrl(url: string): string {
 
 const baseUrl = process.env.DATABASE_URL;
 if (!baseUrl) {
-  throw new Error('DATABASE_URL no está definido en .env (necesario para derivar la BD de test).');
+  throw new Error(
+    'DATABASE_URL no está definido en .env (necesario para derivar la BD de test).',
+  );
 }
 
 export const testDatabaseUrl = toTestUrl(baseUrl);
@@ -28,7 +30,9 @@ export const testDatabaseUrl = toTestUrl(baseUrl);
 // SALVAGUARDA: jamás correr los tests (que truncan tablas) contra una base que
 // no sea explícitamente la de test.
 if (!new URL(testDatabaseUrl).pathname.endsWith('_test')) {
-  throw new Error(`BD de test inválida (no termina en _test): ${testDatabaseUrl}`);
+  throw new Error(
+    `BD de test inválida (no termina en _test): ${testDatabaseUrl}`,
+  );
 }
 
 export const testDataSourceOptions: DataSourceOptions = {

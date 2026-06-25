@@ -95,7 +95,9 @@ describe('Alcance por sede (e2e, BD real)', () => {
     await setupTwoSedes();
     const lonely = await createUser(ds, { role: Role.OPERATOR });
 
-    const result = await reservations.findAll(asAuthUser(lonely, { sedeIds: [] }));
+    const result = await reservations.findAll(
+      asAuthUser(lonely, { sedeIds: [] }),
+    );
 
     expect(result.data).toHaveLength(0);
     expect(result.meta.total).toBe(0);
@@ -120,11 +122,17 @@ describe('Alcance por sede (e2e, BD real)', () => {
     const { rB, authA } = await setupTwoSedes();
 
     await expect(
-      reservations.updateStatus(rB.id, statusDto(ReservationStatus.REJECTED), authA),
+      reservations.updateStatus(
+        rB.id,
+        statusDto(ReservationStatus.REJECTED),
+        authA,
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     // rB intacta y sin log.
-    const updated = await ds.getRepository(Reservation).findOneBy({ id: rB.id });
+    const updated = await ds
+      .getRepository(Reservation)
+      .findOneBy({ id: rB.id });
     expect(updated?.status).toBe(ReservationStatus.UNDER_REVIEW);
     const logs = await ds
       .getRepository(ReservationLog)

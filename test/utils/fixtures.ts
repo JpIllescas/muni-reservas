@@ -128,7 +128,11 @@ export async function createSchedule(
 // preparar el estado inicial de los tests de cron / updateStatus.
 export async function createReservation(
   ds: DataSource,
-  data: Partial<Reservation> & { userId: string; resourceId: string; reservationDate: string },
+  data: Partial<Reservation> & {
+    userId: string;
+    resourceId: string;
+    reservationDate: string;
+  },
 ): Promise<Reservation> {
   const repo = ds.getRepository(Reservation);
   const reservation = repo.create({

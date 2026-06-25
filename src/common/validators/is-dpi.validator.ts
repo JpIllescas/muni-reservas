@@ -9,7 +9,7 @@ import {
 export class IsDPIConstraint implements ValidatorConstraintInterface {
   validate(dpi: any) {
     if (typeof dpi !== 'string') return false;
-    
+
     // Quitar espacios o guiones si el usuario los pone
     const cleanDpi = dpi.replace(/[\s-]/g, '');
 
@@ -30,7 +30,7 @@ export class IsDPIConstraint implements ValidatorConstraintInterface {
     for (let i = 0; i < numero.length; i++) {
       suma += parseInt(numero[i], 10) * (i + 2);
     }
-    
+
     const modulo = suma % 11;
     return modulo === validador;
   }
@@ -41,7 +41,7 @@ export class IsDPIConstraint implements ValidatorConstraintInterface {
 }
 
 export function IsDPI(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       target: object.constructor,
       propertyName: propertyName,

@@ -1,4 +1,8 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
 import { Reservation } from '../reservations/entities/reservation.entity';
 import { User } from '../users/entities/user.entity';
@@ -7,7 +11,7 @@ import { User } from '../users/entities/user.entity';
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
 
-  constructor(private readonly mailerService: MailerService) { }
+  constructor(private readonly mailerService: MailerService) {}
 
   async sendOtpEmail(to: string, fullName: string, code: string) {
     try {

@@ -9,7 +9,9 @@ async function main() {
   const dbName = target.pathname.replace(/^\//, '');
 
   if (!dbName.endsWith('_test')) {
-    throw new Error(`Negativa de seguridad: la BD objetivo no termina en _test: ${dbName}`);
+    throw new Error(
+      `Negativa de seguridad: la BD objetivo no termina en _test: ${dbName}`,
+    );
   }
 
   const adminUrl = new URL(testDatabaseUrl);

@@ -15,6 +15,8 @@ import { ResourcesService } from './resources.service';
 import { CreateResourceDto } from './dto/create-resource.dto';
 import { UpdateResourceDto } from './dto/update-resource.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
+import { CreateExceptionDto } from './dto/create-exception.dto';
+import { UpdateResourceStatusDto } from './dto/update-resource-status.dto';
 import { AvailabilityQueryDto } from './dto/availability-query.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -24,7 +26,7 @@ import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 
 @Controller('resources')
 export class ResourcesController {
-  constructor(private readonly resourcesService: ResourcesService) { }
+  constructor(private readonly resourcesService: ResourcesService) {}
 
   // GET /api/resources — público, cualquiera puede ver el catálogo
   @Get()
@@ -88,9 +90,22 @@ export class ResourcesController {
   toggleActive(
     @Param('id') id: string,
     @CurrentUser() userInfo: AuthUser,
-    @Ip() ip: string
+    @Ip() ip: string,
   ) {
-    return this.resourcesService.toggleActive(id, userInfo, ip)
+    return this.resourcesService.toggleActive(id, userInfo, ip);
+  }
+
+  // PATCH /api/resources/:id/status — admin y operador (REC-2)
+  @Patch(':id/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OPERATOR)
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateResourceStatusDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.resourcesService.updateStatus(id, dto, user, ip);
   }
 
   // POST /api/resources/:id/schedules — solo admin
@@ -103,9 +118,8 @@ export class ResourcesController {
     @CurrentUser() user: AuthUser,
     @Ip() ip: string,
   ) {
-    return this.resourcesService.addSchedule(id, dto, user, ip)
+    return this.resourcesService.addSchedule(id, dto, user, ip);
   }
-
 
   // GET /api/resources/:id/schedules — público
   @Get(':id/schedules')
@@ -123,5 +137,38 @@ export class ResourcesController {
     @Ip() ip: string,
   ) {
     return this.resourcesService.removeSchedule(scheduleId, user, ip);
+  }
+
+  // POST /api/resources/:id/exceptions — admin y operador
+  @Post(':id/exceptions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OPERATOR)
+  addException(
+    @Param('id') id: string,
+    @Body() dto: CreateExceptionDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.resourcesService.addException(id, dto, user, ip);
+  }
+
+  // GET /api/resources/:id/exceptions — admin y operador
+  @Get(':id/exceptions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OPERATOR)
+  getExceptions(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.resourcesService.getExceptions(id, user);
+  }
+
+  // DELETE /api/resources/exceptions/:exceptionId — admin y operador
+  @Delete('exceptions/:exceptionId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OPERATOR)
+  removeException(
+    @Param('exceptionId') exceptionId: string,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.resourcesService.removeException(exceptionId, user, ip);
   }
 }

@@ -18,8 +18,7 @@ export class UsersService {
     private readonly userRepository: Repository<User>,
 
     private readonly auditService: AuditService,
-  ) { }
-
+  ) {}
 
   // Obtener todos los usuarios — solo admin
   async findAll() {

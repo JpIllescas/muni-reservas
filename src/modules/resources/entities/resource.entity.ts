@@ -9,6 +9,7 @@ import {
   Index,
 } from 'typeorm';
 import { ResourceType } from '../../../common/enums/resource-type.enum';
+import { ResourceStatus } from '../../../common/enums/resource-status.enum';
 import { Sede } from './sede.entity';
 
 @Entity('resources')
@@ -62,7 +63,12 @@ export class Resource {
   advanceDays: number;
 
   // Tope de duración por reserva (solo aplica a canchas/COURT). null = sin tope.
-  @Column({ name: 'max_duration_minutes', type: 'int', nullable: true, default: 180 })
+  @Column({
+    name: 'max_duration_minutes',
+    type: 'int',
+    nullable: true,
+    default: 180,
+  })
   maxDurationMinutes: number | null;
 
   // Ventana de pago en horas (POL-1): plazo para subir la boleta antes de que la
@@ -77,6 +83,21 @@ export class Resource {
   // (Florencia): el admin aprueba directo sin boleta y la reserva no auto-expira.
   @Column({ name: 'requires_voucher', default: true })
   requiresVoucher: boolean;
+
+  // REC-2: estado operativo (mantenimiento / evento). NOT NULL default available.
+  // Separado de isActive: un recurso en mantenimiento sigue activo y visible en el
+  // catálogo (etiquetado), pero no admite reservas nuevas.
+  @Column({
+    type: 'enum',
+    enum: ResourceStatus,
+    default: ResourceStatus.AVAILABLE,
+  })
+  status: ResourceStatus;
+
+  // Motivo del estado (ej. "Cancha cerrada por torneo X"). null cuando está
+  // available. Se muestra al ciudadano en la disponibilidad.
+  @Column({ name: 'status_reason', type: 'text', nullable: true })
+  statusReason: string | null;
 
   @Column({ name: 'is_active', default: true })
   isActive: boolean;

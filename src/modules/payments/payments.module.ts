@@ -31,7 +31,9 @@ import { Reservation } from '../reservations/entities/reservation.entity';
           fileFilter: (req, file, cb) => {
             if (!file.mimetype.match(/\/(jpg|jpeg|png|pdf)$/)) {
               return cb(
-                new BadRequestException('Solo se permiten imágenes (JPG/PNG) o PDFs'),
+                new BadRequestException(
+                  'Solo se permiten imágenes (JPG/PNG) o PDFs',
+                ),
                 false,
               );
             }
@@ -48,4 +50,4 @@ import { Reservation } from '../reservations/entities/reservation.entity';
   controllers: [PaymentsController],
   providers: [PaymentsService],
 })
-export class PaymentsModule { }
+export class PaymentsModule {}

@@ -19,6 +19,7 @@ import {
   NON_CANCELLABLE_RESERVATION_STATUSES,
 } from '../../common/enums/reservation-status.enum';
 import { ResourceType } from '../../common/enums/resource-type.enum';
+import { ResourceStatus } from '../../common/enums/resource-status.enum';
 import { Role } from '../../common/enums/role.enum';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -56,12 +57,11 @@ export class ReservationsService {
     private readonly notificationsService: NotificationsService,
 
     private readonly dataSource: DataSource,
-  ) { }
+  ) {}
 
   async create(userId: string, dto: CreateReservationDto) {
     // Envolvemos TODO en una transacción ACID
     return this.dataSource.transaction(async (manager) => {
-
       // BLOQUEO PESIMISTA: Si dos personas intentan reservar ESTE recurso al mismo tiempo,
       // la base de datos hará que el segundo espere a que el primero termine.
       const resource = await manager.findOne(Resource, {
@@ -73,15 +73,29 @@ export class ReservationsService {
         throw new NotFoundException('Recurso no encontrado o inactivo.');
       }
 
+      // REC-2: el recurso puede estar activo pero en mantenimiento/evento. El
+      // fetch filtra por isActive (no por status), así que se chequea aquí.
+      if (resource.status !== ResourceStatus.AVAILABLE) {
+        throw new BadRequestException(
+          resource.statusReason
+            ? `El recurso no está disponible: ${resource.statusReason}.`
+            : `El recurso está en ${resource.status} y no admite reservas.`,
+        );
+      }
+
       const now = guatemalaNow();
 
       if (dto.reservationDate < now.date) {
-        throw new BadRequestException('No puedes reservar en una fecha pasada.');
+        throw new BadRequestException(
+          'No puedes reservar en una fecha pasada.',
+        );
       }
 
       if (dto.reservationDate === now.date && dto.startTime) {
         if (hhmmToMinutes(dto.startTime) < now.minutes) {
-          throw new BadRequestException('La hora de inicio ya pasó el dia de hoy.');
+          throw new BadRequestException(
+            'La hora de inicio ya pasó el dia de hoy.',
+          );
         }
       }
 
@@ -121,13 +135,17 @@ export class ReservationsService {
 
       if (resource.type === ResourceType.COURT) {
         if (!dto.startTime || !dto.endTime) {
-          throw new BadRequestException('Para canchas debes especificar hora de inicio y fin.');
+          throw new BadRequestException(
+            'Para canchas debes especificar hora de inicio y fin.',
+          );
         }
 
         // Comparamos por minutos (no con new Date): así "9:00" (una cifra,
         // permitido por el regex del DTO) se evalúa bien y no da NaN.
         if (hhmmToMinutes(dto.startTime) >= hhmmToMinutes(dto.endTime)) {
-          throw new BadRequestException('La hora de inicio debe ser estrictamente anterior a la hora de fin.');
+          throw new BadRequestException(
+            'La hora de inicio debe ser estrictamente anterior a la hora de fin.',
+          );
         }
 
         const durationMinutes =
@@ -168,7 +186,9 @@ export class ReservationsService {
           .getOne();
 
         if (existingCourtReservation) {
-          throw new BadRequestException('Ya tienes una reserva de cancha para ese día.');
+          throw new BadRequestException(
+            'Ya tienes una reserva de cancha para ese día.',
+          );
         }
 
         const conflictingReservation = await manager
@@ -183,7 +203,9 @@ export class ReservationsService {
           .getOne();
 
         if (conflictingReservation) {
-          throw new BadRequestException('Ese horario ya está ocupado. Por favor elige otro.');
+          throw new BadRequestException(
+            'Ese horario ya está ocupado. Por favor elige otro.',
+          );
         }
       }
 
@@ -197,7 +219,9 @@ export class ReservationsService {
         });
 
         if (existingRanchReservation) {
-          throw new BadRequestException('Este rancho ya está reservado para esa fecha.');
+          throw new BadRequestException(
+            'Este rancho ya está reservado para esa fecha.',
+          );
         }
       }
 
@@ -280,11 +304,8 @@ export class ReservationsService {
       .createQueryBuilder('r')
       .leftJoinAndSelect('r.resource', 'resource')
       .leftJoinAndSelect('r.user', 'user')
-      .loadRelationCountAndMap(
-        'r.voucherCount',
-        'r.payments',
-        'p',
-        (qb) => qb.where('p.voucherPath IS NOT NULL'),
+      .loadRelationCountAndMap('r.voucherCount', 'r.payments', 'p', (qb) =>
+        qb.where('p.voucherPath IS NOT NULL'),
       )
       .orderBy('r.createdAt', 'DESC');
 
@@ -315,7 +336,7 @@ export class ReservationsService {
         page,
         limit,
         totalPages: Math.ceil(total / limit),
-      }
+      },
     };
   }
 
@@ -333,7 +354,9 @@ export class ReservationsService {
     // El ciudadano solo puede ver sus propias reservas.
     if (user.role === Role.CITIZEN) {
       if (reservation.userId !== user.id) {
-        throw new ForbiddenException('No tienes permiso para ver esta reserva.');
+        throw new ForbiddenException(
+          'No tienes permiso para ver esta reserva.',
+        );
       }
     } else {
       // Admin/operador: solo reservas de recursos de sus sedes (ADM-1).
@@ -519,7 +542,8 @@ export class ReservationsService {
         log.fromStatus = ReservationStatus.PENDING_PAYMENT;
         log.toStatus = ReservationStatus.EXPIRED;
         log.changedById = null;
-        log.reason = 'Expirada automaticamente por vencimiento de plazo de pago';
+        log.reason =
+          'Expirada automaticamente por vencimiento de plazo de pago';
         return log;
       });
 
@@ -528,5 +552,4 @@ export class ReservationsService {
       return expiredIds.length;
     });
   }
-
 }
