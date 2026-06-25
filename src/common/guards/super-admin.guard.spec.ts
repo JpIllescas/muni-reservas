@@ -13,7 +13,9 @@ describe('SuperAdminGuard', () => {
   const guard = new SuperAdminGuard();
 
   it('permite el acceso al super-admin', () => {
-    expect(guard.canActivate(contextWithUser({ isSuperAdmin: true }))).toBe(true);
+    expect(guard.canActivate(contextWithUser({ isSuperAdmin: true }))).toBe(
+      true,
+    );
   });
 
   it('niega el acceso a un admin/operador normal', () => {

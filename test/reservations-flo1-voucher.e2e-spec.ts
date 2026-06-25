@@ -51,7 +51,10 @@ describe('FLO-1 — recurso sin comprobante (e2e, BD real)', () => {
   });
 
   it('updateStatus: aprueba pending_payment → approved SIN pago si el recurso no exige boleta', async () => {
-    const admin = await createUser(ds, { role: Role.ADMIN, isSuperAdmin: true });
+    const admin = await createUser(ds, {
+      role: Role.ADMIN,
+      isSuperAdmin: true,
+    });
     const citizen = await createUser(ds);
     const ranch = await createRanchResource(ds, { requiresVoucher: false });
     const r = await createReservation(ds, {

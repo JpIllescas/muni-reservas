@@ -12,7 +12,11 @@ import {
 
 import { createTestModule } from './utils/test-module';
 import { cleanDatabase } from './utils/db-clean';
-import { createUser, createCourtResource, createSchedule } from './utils/fixtures';
+import {
+  createUser,
+  createCourtResource,
+  createSchedule,
+} from './utils/fixtures';
 
 // Test #6 — LÍMITE "1 cancha por usuario por día" bajo concurrencia CROSS-RESOURCE.
 //

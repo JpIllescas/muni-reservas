@@ -7,21 +7,23 @@ import helmet from 'helmet';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // 2. Escudo de seguridad HTTP 
+  // 2. Escudo de seguridad HTTP
   app.use(helmet());
 
   app.useGlobalFilters(new AllExceptionsFilter());
 
   app.setGlobalPrefix('api');
 
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   app.enableCors({
-    // 3. URL del frontend desde variables de entorno 
+    // 3. URL del frontend desde variables de entorno
     origin: process.env.FRONTEND_URL || 'http://localhost:4200',
     methods: 'GET,HEAD,PATCH,POST,DELETE',
     credentials: true,

@@ -13,10 +13,16 @@ import { Reservation } from '../reservations/entities/reservation.entity';
 import { CreateResourceDto } from './dto/create-resource.dto';
 import { UpdateResourceDto } from './dto/update-resource.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
+import { CreateExceptionDto } from './dto/create-exception.dto';
+import { UpdateResourceStatusDto } from './dto/update-resource-status.dto';
 import { AuditService } from '../audit/audit.service';
 import { ResourceType } from '../../common/enums/resource-type.enum';
+import { ResourceStatus } from '../../common/enums/resource-status.enum';
 import { INACTIVE_RESERVATION_STATUSES } from '../../common/enums/reservation-status.enum';
-import { dayOfWeekFromISODate } from '../../common/utils/date.utils';
+import {
+  dayOfWeekFromISODate,
+  guatemalaNow,
+} from '../../common/utils/date.utils';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { assertSedeAccess } from '../../common/utils/sede-scope.util';
 
@@ -39,7 +45,7 @@ export class ResourcesService {
     private readonly reservationRepository: Repository<Reservation>,
 
     private readonly auditService: AuditService,
-  ) { }
+  ) {}
 
   // Crear un nuevo recurso (cancha o rancho)
   async create(dto: CreateResourceDto, user: AuthUser, ipAddress?: string) {
@@ -47,7 +53,9 @@ export class ResourcesService {
     assertSedeAccess(user, dto.sedeId);
 
     // La sede debe existir (el FK lo impediría igual, pero damos error claro).
-    const sede = await this.sedeRepository.findOne({ where: { id: dto.sedeId } });
+    const sede = await this.sedeRepository.findOne({
+      where: { id: dto.sedeId },
+    });
     if (!sede) {
       throw new BadRequestException('La sede indicada no existe.');
     }
@@ -145,15 +153,27 @@ export class ResourcesService {
       order: { startTime: 'ASC' },
     });
 
-    // Cerrado: hay excepción o el recurso no atiende ese día.
-    const closed = !!exception || !schedule;
+    // REC-2: estado operativo (mantenimiento / evento) cierra el recurso aunque
+    // siga activo y con horario.
+    const inMaintenance = resource.status !== ResourceStatus.AVAILABLE;
+
+    // Cerrado: estado operativo, excepción de fecha, o el recurso no atiende ese día.
+    const closed = inMaintenance || !!exception || !schedule;
+
+    // Prioridad del motivo: excepción puntual > estado operativo del recurso.
+    const reason = exception
+      ? exception.reason
+      : inMaintenance
+        ? (resource.statusReason ?? `Recurso en ${resource.status}.`)
+        : null;
 
     const base = {
       resourceId,
       date,
       type: resource.type,
       closed,
-      reason: exception ? exception.reason : null,
+      status: resource.status,
+      reason,
     };
 
     // Rancho: día completo. Solo interesa si el día está libre o tomado.
@@ -289,11 +309,7 @@ export class ResourcesService {
   }
 
   // Desactivar un horario
-  async removeSchedule(
-    scheduleId: string,
-    user: AuthUser,
-    ipAddress?: string,
-  ) {
+  async removeSchedule(scheduleId: string, user: AuthUser, ipAddress?: string) {
     const schedule = await this.scheduleRepository.findOne({
       where: { id: scheduleId },
     });
@@ -321,5 +337,177 @@ export class ResourcesService {
       ipAddress,
     );
     return { message: 'Horario eliminado correctamente.' };
+  }
+
+  // Bloquear una fecha de un recurso (feriado / mantenimiento puntual).
+  async addException(
+    resourceId: string,
+    dto: CreateExceptionDto,
+    user: AuthUser,
+    ipAddress?: string,
+  ) {
+    const resource = await this.resourceRepository.findOne({
+      where: { id: resourceId },
+    });
+
+    if (!resource) {
+      throw new NotFoundException('Recurso no encontrado.');
+    }
+
+    // ADM-1: solo recursos de las sedes del actor.
+    assertSedeAccess(user, resource.sedeId);
+
+    // No se bloquean fechas en el pasado (comparación por string YYYY-MM-DD).
+    if (dto.exceptionDate < guatemalaNow().date) {
+      throw new BadRequestException(
+        'No se puede bloquear una fecha que ya pasó.',
+      );
+    }
+
+    // Una sola excepción por recurso/fecha (no hay unique en BD: se valida acá).
+    const existing = await this.exceptionRepository.findOne({
+      where: { resourceId, exceptionDate: dto.exceptionDate as any },
+    });
+    if (existing) {
+      throw new BadRequestException('Esa fecha ya está bloqueada.');
+    }
+
+    // No bloquear si hay reservas vivas ese día: el bloqueo NO las cancela y
+    // solo afecta reservas nuevas. El admin debe resolverlas primero.
+    const liveReservations = await this.reservationRepository.count({
+      where: {
+        resourceId,
+        reservationDate: dto.exceptionDate,
+        status: Not(In(INACTIVE_RESERVATION_STATUSES)),
+      },
+    });
+    if (liveReservations > 0) {
+      throw new BadRequestException(
+        `No se puede bloquear: la fecha tiene ${liveReservations} reserva(s) activa(s). Resuélvelas primero.`,
+      );
+    }
+
+    const exception = this.exceptionRepository.create({
+      resourceId,
+      exceptionDate: dto.exceptionDate as any,
+      reason: dto.reason,
+      createdById: user.id,
+    });
+    const saved = await this.exceptionRepository.save(exception);
+
+    await this.auditService.createLog(
+      'ResourceException',
+      'CREATE',
+      user.id,
+      saved.id,
+      undefined,
+      { ...dto, resourceId },
+      ipAddress,
+    );
+
+    return saved;
+  }
+
+  // Listar las fechas bloqueadas de un recurso (panel admin).
+  async getExceptions(resourceId: string, user: AuthUser) {
+    const resource = await this.resourceRepository.findOne({
+      where: { id: resourceId },
+    });
+
+    if (!resource) {
+      throw new NotFoundException('Recurso no encontrado.');
+    }
+
+    // ADM-1: solo recursos de las sedes del actor.
+    assertSedeAccess(user, resource.sedeId);
+
+    return this.exceptionRepository.find({
+      where: { resourceId },
+      order: { exceptionDate: 'ASC' },
+    });
+  }
+
+  // Desbloquear una fecha (hard delete; el audit log guarda el valor previo).
+  async removeException(
+    exceptionId: string,
+    user: AuthUser,
+    ipAddress?: string,
+  ) {
+    const exception = await this.exceptionRepository.findOne({
+      where: { id: exceptionId },
+    });
+
+    if (!exception) {
+      throw new NotFoundException('Fecha bloqueada no encontrada.');
+    }
+
+    // ADM-1: la excepción pertenece a un recurso → acotar por su sede.
+    const resource = await this.resourceRepository.findOne({
+      where: { id: exception.resourceId },
+    });
+    assertSedeAccess(user, resource!.sedeId);
+
+    await this.exceptionRepository.remove(exception);
+
+    await this.auditService.createLog(
+      'ResourceException',
+      'DELETE',
+      user.id,
+      exceptionId,
+      {
+        resourceId: exception.resourceId,
+        exceptionDate: exception.exceptionDate,
+        reason: exception.reason,
+      },
+      undefined,
+      ipAddress,
+    );
+
+    return { message: 'Fecha desbloqueada correctamente.' };
+  }
+
+  // REC-2: cambiar el estado operativo del recurso (available / maintenance /
+  // event). No toca isActive ni cancela reservas vivas: solo bloquea reservas
+  // nuevas (vía create() y getAvailability).
+  async updateStatus(
+    id: string,
+    dto: UpdateResourceStatusDto,
+    user: AuthUser,
+    ipAddress?: string,
+  ) {
+    const resource = await this.resourceRepository.findOne({ where: { id } });
+
+    if (!resource) {
+      throw new NotFoundException('Recurso no encontrado.');
+    }
+
+    // ADM-1: solo recursos de las sedes del actor.
+    assertSedeAccess(user, resource.sedeId);
+
+    const oldValue = {
+      status: resource.status,
+      statusReason: resource.statusReason,
+    };
+
+    resource.status = dto.status;
+    // El motivo solo aplica a estados no-disponibles; al volver a available se limpia.
+    resource.statusReason =
+      dto.status === ResourceStatus.AVAILABLE
+        ? null
+        : (dto.statusReason ?? null);
+
+    const saved = await this.resourceRepository.save(resource);
+
+    await this.auditService.createLog(
+      'Resource',
+      'UPDATE_STATUS',
+      user.id,
+      id,
+      oldValue,
+      { status: saved.status, statusReason: saved.statusReason },
+      ipAddress,
+    );
+
+    return saved;
   }
 }

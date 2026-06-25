@@ -12,7 +12,11 @@ import {
 
 import { createTestModule } from './utils/test-module';
 import { cleanDatabase } from './utils/db-clean';
-import { createUser, createCourtResource, createSchedule } from './utils/fixtures';
+import {
+  createUser,
+  createCourtResource,
+  createSchedule,
+} from './utils/fixtures';
 
 // Test #4 — CONCURRENCIA (el de mayor peso para la defensa).
 //

@@ -23,7 +23,7 @@ import { FindReservationsDto } from './dto/find-reservations.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('reservations')
 export class ReservationsController {
-  constructor(private readonly reservationsService: ReservationsService) { }
+  constructor(private readonly reservationsService: ReservationsService) {}
 
   // POST /api/reservations - cualquier usuario autenticado
   @Post()
@@ -35,7 +35,12 @@ export class ReservationsController {
   @Get()
   @Roles(Role.ADMIN, Role.OPERATOR)
   findAll(@CurrentUser() user: AuthUser, @Query() dto: FindReservationsDto) {
-    return this.reservationsService.findAll(user, dto.status, dto.page, dto.limit);
+    return this.reservationsService.findAll(
+      user,
+      dto.status,
+      dto.page,
+      dto.limit,
+    );
   }
 
   // GET /api/reservations/my - el ciudadano ve sus propias reservas

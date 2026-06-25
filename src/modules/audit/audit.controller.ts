@@ -9,7 +9,7 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('audit')
 export class AuditController {
-  constructor(private readonly auditService: AuditService) { }
+  constructor(private readonly auditService: AuditService) {}
 
   // GET /api/audit?page=1&limit=50 - Solo Administradores pueden ver esto
   @Roles(Role.ADMIN)

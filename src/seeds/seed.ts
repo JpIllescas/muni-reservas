@@ -33,8 +33,16 @@ const SEDE_POLVORA_ID = '11111111-1111-4111-8111-111111111111';
 const SEDE_FLORENCIA_ID = '22222222-2222-4222-8222-222222222222';
 
 const SEDES: Partial<Sede>[] = [
-  { id: SEDE_POLVORA_ID, name: 'Complejo Deportivo La Pólvora', address: 'La Antigua Guatemala' },
-  { id: SEDE_FLORENCIA_ID, name: 'Parque Ecológico Florencia', address: 'La Antigua Guatemala' },
+  {
+    id: SEDE_POLVORA_ID,
+    name: 'Complejo Deportivo La Pólvora',
+    address: 'La Antigua Guatemala',
+  },
+  {
+    id: SEDE_FLORENCIA_ID,
+    name: 'Parque Ecológico Florencia',
+    address: 'La Antigua Guatemala',
+  },
 ];
 
 const RESOURCES: Partial<Resource>[] = [
@@ -47,7 +55,8 @@ const RESOURCES: Partial<Resource>[] = [
     sedeId: SEDE_POLVORA_ID,
     capacity: 22,
     pricePerUnit: 75.0,
-    rules: 'Máximo 1 reserva por día por usuario. Presentarse 10 minutos antes.',
+    rules:
+      'Máximo 1 reserva por día por usuario. Presentarse 10 minutos antes.',
     advanceDays: 7,
     isActive: true,
   },
@@ -76,8 +85,16 @@ type SeedSchedule = {
   slotDurationMin: number | null;
 };
 const SCHEDULES: Record<string, SeedSchedule> = {
-  [COURT_ID]: { openTime: '07:00:00', closeTime: '21:00:00', slotDurationMin: 60 },
-  [RANCH_ID]: { openTime: '08:00:00', closeTime: '17:00:00', slotDurationMin: null },
+  [COURT_ID]: {
+    openTime: '07:00:00',
+    closeTime: '21:00:00',
+    slotDurationMin: 60,
+  },
+  [RANCH_ID]: {
+    openTime: '08:00:00',
+    closeTime: '17:00:00',
+    slotDurationMin: null,
+  },
 };
 
 async function seedSedes(): Promise<void> {

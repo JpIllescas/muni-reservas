@@ -23,7 +23,7 @@ import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('payments')
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) { }
+  constructor(private readonly paymentsService: PaymentsService) {}
 
   // POST /api/payments/:reservationId/voucher - El ciudadano sube su boleta
   @Post(':reservationId/voucher')
@@ -34,7 +34,6 @@ export class PaymentsController {
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: UploadVoucherDto,
   ) {
-
     return this.paymentsService.uploadVoucher(
       reservationId,
       user.id,

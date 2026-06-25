@@ -12,7 +12,11 @@ import {
 
 import { createTestModule } from './utils/test-module';
 import { cleanDatabase } from './utils/db-clean';
-import { createUser, createCourtResource, createSchedule } from './utils/fixtures';
+import {
+  createUser,
+  createCourtResource,
+  createSchedule,
+} from './utils/fixtures';
 
 // Test #5 — ATOMICIDAD / ROLLBACK.
 //
@@ -29,7 +33,9 @@ class FailingLogSubscriber implements EntitySubscriberInterface<ReservationLog> 
     return ReservationLog;
   }
   beforeInsert(_event: InsertEvent<ReservationLog>) {
-    throw new Error('Fallo inyectado al insertar ReservationLog (test de rollback).');
+    throw new Error(
+      'Fallo inyectado al insertar ReservationLog (test de rollback).',
+    );
   }
 }
 

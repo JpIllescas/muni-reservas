@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -34,7 +30,7 @@ export class AuthService {
 
     private readonly jwtService: JwtService,
     private readonly notificationsService: NotificationsService,
-  ) { }
+  ) {}
 
   // Registro de nuevo usuario.
   // Anti-enumeración (#12): si el correo o el DPI ya existen NO creamos la cuenta,

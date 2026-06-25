@@ -30,7 +30,7 @@ export class PaymentsService {
     private readonly reservationRepository: Repository<Reservation>,
 
     private readonly dataSource: DataSource,
-  ) { }
+  ) {}
 
   async uploadVoucher(
     reservationId: string,
@@ -39,7 +39,9 @@ export class PaymentsService {
     dto: UploadVoucherDto,
   ) {
     if (!file) {
-      throw new BadRequestException('La imagen oPDF de la boleta es requerido.');
+      throw new BadRequestException(
+        'La imagen oPDF de la boleta es requerido.',
+      );
     }
 
     const realType = await detectFileType(file.path);
@@ -161,10 +163,12 @@ export class PaymentsService {
     try {
       await fs.access(absPath);
     } catch {
-      throw new NotFoundException('El archivo de la boleta ya no está disponible.');
+      throw new NotFoundException(
+        'El archivo de la boleta ya no está disponible.',
+      );
     }
 
-    // Content-type por magic bytes 
+    // Content-type por magic bytes
     const realType = await detectFileType(absPath);
     const contentType =
       realType === 'pdf'

@@ -39,7 +39,9 @@ import { SedesModule } from './modules/sedes/sedes.module';
       validationSchema: Joi.object({
         DATABASE_URL: Joi.string().required(),
         DB_SSL: Joi.string().valid('true', 'false').default('false'),
-        NODE_ENV: Joi.string().valid('development', 'production', 'test').required(),
+        NODE_ENV: Joi.string()
+          .valid('development', 'production', 'test')
+          .required(),
         JWT_SECRET: Joi.string().min(32).required(),
         JWT_EXPIRES_IN: Joi.string().required(),
         MAIL_HOST: Joi.string().required(),
@@ -58,7 +60,10 @@ import { SedesModule } from './modules/sedes/sedes.module';
         return {
           type: 'postgres',
           url: configService.get<string>('DATABASE_URL'),
-          ssl: configService.get<string>('DB_SSL') === 'true' ? { rejectUnauthorized: false } : false,
+          ssl:
+            configService.get<string>('DB_SSL') === 'true'
+              ? { rejectUnauthorized: false }
+              : false,
           entities: [
             User,
             OtpCode,
@@ -79,10 +84,12 @@ import { SedesModule } from './modules/sedes/sedes.module';
       inject: [ConfigService],
     }),
 
-    ThrottlerModule.forRoot([{
-      ttl: 60000,
-      limit: 10,
-    }]),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 10,
+      },
+    ]),
 
     // imports
     ScheduleModule.forRoot(),
@@ -105,4 +112,4 @@ import { SedesModule } from './modules/sedes/sedes.module';
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}
