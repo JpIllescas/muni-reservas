@@ -481,6 +481,189 @@ export class ReservationsService {
     return reservation;
   }
 
+  // RES-1: el admin revierte un rechazo hecho por error, SOLO si el horario
+  // original sigue libre. Si ya fue tomado, se rechaza y queda para la
+  // reasignación con aprobación del ciudadano (RES-3, futuro). Restaura el estado
+  // que la reserva tenía ANTES del rechazo (leído del log). Acción de admin.
+  async revertRejection(id: string, user: AuthUser, ipAddress?: string) {
+    const { reservation, toStatus } = await this.dataSource.transaction(
+      async (manager) => {
+        const found = await manager.findOne(Reservation, {
+          where: { id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!found) {
+          throw new NotFoundException('Reserva no encontrada.');
+        }
+        if (found.status !== ReservationStatus.REJECTED) {
+          throw new BadRequestException(
+            'Solo se puede revertir una reserva rechazada.',
+          );
+        }
+
+        // Candado pesimista sobre el recurso: serializa contra creates concurrentes
+        // del mismo slot (igual que create()).
+        const resource = await manager.findOne(Resource, {
+          where: { id: found.resourceId },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        // Admin/operador solo gestiona reservas de recursos de sus sedes (ADM-1).
+        if (!user.isSuperAdmin) {
+          assertSedeAccess(user, resource!.sedeId);
+        }
+
+        // El recurso debe poder recibir reservas (activo y disponible).
+        if (
+          !resource!.isActive ||
+          resource!.status !== ResourceStatus.AVAILABLE
+        ) {
+          throw new BadRequestException(
+            'El recurso no está disponible; no se puede revertir la reserva.',
+          );
+        }
+
+        // No tiene sentido revivir una reserva de una fecha que ya pasó.
+        const now = guatemalaNow();
+        if (found.reservationDate < now.date) {
+          throw new BadRequestException(
+            'No se puede revertir una reserva de una fecha pasada.',
+          );
+        }
+
+        // El slot debe seguir libre. Self está REJECTED (inactivo) → no aparece
+        // en estas consultas, no hace falta excluirlo explícitamente.
+        if (resource!.type === ResourceType.COURT) {
+          await manager.query(
+            'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+            [found.userId, found.reservationDate],
+          );
+
+          const existingCourt = await manager
+            .createQueryBuilder(Reservation, 'r')
+            .innerJoin('r.resource', 'res')
+            .where('r.userId = :userId', { userId: found.userId })
+            .andWhere('r.reservationDate = :date', {
+              date: found.reservationDate,
+            })
+            .andWhere('res.type = :type', { type: ResourceType.COURT })
+            .andWhere('r.status NOT IN (:...statuses)', {
+              statuses: INACTIVE_RESERVATION_STATUSES,
+            })
+            .getOne();
+          if (existingCourt) {
+            throw new BadRequestException(
+              'El ciudadano ya tiene otra reserva de cancha activa ese día.',
+            );
+          }
+
+          const conflicting = await manager
+            .createQueryBuilder(Reservation, 'r')
+            .where('r.resourceId = :resourceId', {
+              resourceId: found.resourceId,
+            })
+            .andWhere('r.reservationDate = :date', {
+              date: found.reservationDate,
+            })
+            .andWhere('r.startTime < :endTime', { endTime: found.endTime })
+            .andWhere('r.endTime > :startTime', { startTime: found.startTime })
+            .andWhere('r.status NOT IN (:...statuses)', {
+              statuses: INACTIVE_RESERVATION_STATUSES,
+            })
+            .getOne();
+          if (conflicting) {
+            throw new BadRequestException(
+              'El horario ya fue tomado por otra reserva; usa la reasignación.',
+            );
+          }
+        }
+
+        if (resource!.type === ResourceType.RANCH) {
+          const existingRanch = await manager.findOne(Reservation, {
+            where: {
+              resourceId: found.resourceId,
+              reservationDate: found.reservationDate,
+              status: Not(In(INACTIVE_RESERVATION_STATUSES)),
+            },
+          });
+          if (existingRanch) {
+            throw new BadRequestException(
+              'El rancho ya está reservado esa fecha; usa la reasignación.',
+            );
+          }
+        }
+
+        // Estado destino = el que tenía justo antes del rechazo (del log). El
+        // único origen válido de un rechazo es UNDER_REVIEW o PENDING_PAYMENT.
+        const rejectLog = await manager.findOne(ReservationLog, {
+          where: { reservationId: id, toStatus: ReservationStatus.REJECTED },
+          order: { createdAt: 'DESC' },
+        });
+        let toStatus =
+          rejectLog?.fromStatus ?? ReservationStatus.PENDING_PAYMENT;
+        if (
+          toStatus !== ReservationStatus.UNDER_REVIEW &&
+          toStatus !== ReservationStatus.PENDING_PAYMENT
+        ) {
+          toStatus = ReservationStatus.PENDING_PAYMENT;
+        }
+
+        found.status = toStatus;
+        found.rejectionReason = null;
+        // Si vuelve a pending_payment y el recurso cobra por hora con boleta, se
+        // le da una ventana de pago FRESCA (si no, el cron lo re-expira al toque).
+        if (
+          toStatus === ReservationStatus.PENDING_PAYMENT &&
+          resource!.type === ResourceType.COURT &&
+          resource!.requiresVoucher
+        ) {
+          const deadline = new Date();
+          deadline.setHours(deadline.getHours() + resource!.paymentWindowHours);
+          found.paymentDeadline = deadline;
+        } else {
+          found.paymentDeadline = null;
+        }
+        await manager.save(found);
+
+        const log = new ReservationLog();
+        log.reservationId = id;
+        log.fromStatus = ReservationStatus.REJECTED;
+        log.toStatus = toStatus;
+        log.changedById = user.id;
+        log.reason = 'Rechazo revertido por la administración';
+        await manager.save(log);
+
+        const reservation = await manager.findOne(Reservation, {
+          where: { id },
+          relations: ['user', 'resource'],
+        });
+
+        return { reservation, toStatus };
+      },
+    );
+
+    await this.auditService.createLog(
+      'Reservation',
+      'REVERT_REJECTION',
+      user.id,
+      id,
+      { status: ReservationStatus.REJECTED },
+      { status: toStatus },
+      ipAddress,
+    );
+
+    if (reservation && reservation.user) {
+      await this.notificationsService.sendReservationStatusEmail(
+        reservation.user,
+        reservation,
+        toStatus,
+        'Rechazo revertido por la administración',
+      );
+    }
+
+    return reservation;
+  }
+
   // El ciudadano cancela su propia reserva
   async cancel(id: string, userId: string) {
     const reservation = await this.reservationRepository.findOne({
