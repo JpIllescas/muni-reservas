@@ -67,6 +67,18 @@ export class ReservationsController {
     return this.reservationsService.updateStatus(id, dto, user, ip);
   }
 
+  // PATCH /api/reservations/:id/revert-rejection - revertir un rechazo (RES-1).
+  // Exclusivo de la administración (decisión D); solo si el horario sigue libre.
+  @Patch(':id/revert-rejection')
+  @Roles(Role.ADMIN)
+  revertRejection(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.reservationsService.revertRejection(id, user, ip);
+  }
+
   // PATCH /api/reservations/:id/cancel - el ciudadadno cancela su reserva
   @Patch(':id/cancel')
   cancel(@Param('id') id: string, @CurrentUser() user: AuthUser) {
