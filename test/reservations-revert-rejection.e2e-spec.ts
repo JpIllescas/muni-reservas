@@ -7,6 +7,8 @@ import { Reservation } from '../src/modules/reservations/entities/reservation.en
 import { ReservationLog } from '../src/modules/reservations/entities/reservation-log.entity';
 import { ReservationStatus } from '../src/common/enums/reservation-status.enum';
 import { Role } from '../src/common/enums/role.enum';
+import { ResourceException } from '../src/modules/resources/entities/resource-exception.entity';
+import { dayOfWeekFromISODate } from '../src/common/utils/date.utils';
 
 import { createTestModule } from './utils/test-module';
 import { cleanDatabase } from './utils/db-clean';
@@ -14,8 +16,12 @@ import {
   createUser,
   createCourtResource,
   createReservation,
+  createSchedule,
   asAuthUser,
 } from './utils/fixtures';
+
+// Fecha futura usada en todos los casos; su día de la semana fija el ResourceSchedule.
+const DATE = '2099-01-05';
 
 // RES-1 — Revertir un rechazo (solo admin), únicamente si el horario sigue libre.
 describe('revertRejection — RES-1 (e2e, BD real)', () => {
@@ -45,10 +51,11 @@ describe('revertRejection — RES-1 (e2e, BD real)', () => {
   it('revierte un rechazo al estado previo (del log) cuando el slot sigue libre', async () => {
     const citizen = await createUser(ds);
     const court = await createCourtResource(ds);
+    await createSchedule(ds, court.id, dayOfWeekFromISODate(DATE));
     const r = await createReservation(ds, {
       userId: citizen.id,
       resourceId: court.id,
-      reservationDate: '2099-01-05',
+      reservationDate: DATE,
       startTime: '10:00',
       endTime: '11:00',
       status: ReservationStatus.REJECTED,
@@ -84,11 +91,12 @@ describe('revertRejection — RES-1 (e2e, BD real)', () => {
     const citizenA = await createUser(ds);
     const citizenB = await createUser(ds);
     const court = await createCourtResource(ds);
+    await createSchedule(ds, court.id, dayOfWeekFromISODate(DATE));
 
     const rejected = await createReservation(ds, {
       userId: citizenA.id,
       resourceId: court.id,
-      reservationDate: '2099-01-05',
+      reservationDate: DATE,
       startTime: '10:00',
       endTime: '11:00',
       status: ReservationStatus.REJECTED,
@@ -97,7 +105,7 @@ describe('revertRejection — RES-1 (e2e, BD real)', () => {
     await createReservation(ds, {
       userId: citizenB.id,
       resourceId: court.id,
-      reservationDate: '2099-01-05',
+      reservationDate: DATE,
       startTime: '10:00',
       endTime: '11:00',
       status: ReservationStatus.UNDER_REVIEW,
@@ -128,5 +136,56 @@ describe('revertRejection — RES-1 (e2e, BD real)', () => {
     await expect(
       service.revertRejection(r.id, await adminAuth()),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('NO revierte si la fecha quedó bloqueada por una excepción', async () => {
+    const citizen = await createUser(ds);
+    const court = await createCourtResource(ds);
+    await createSchedule(ds, court.id, dayOfWeekFromISODate(DATE));
+    const r = await createReservation(ds, {
+      userId: citizen.id,
+      resourceId: court.id,
+      reservationDate: DATE,
+      startTime: '10:00',
+      endTime: '11:00',
+      status: ReservationStatus.REJECTED,
+    });
+    // Tras el rechazo, el admin bloqueó esa fecha (feriado / mantenimiento puntual).
+    await ds.getRepository(ResourceException).save({
+      resourceId: court.id,
+      exceptionDate: DATE as any,
+      reason: 'Feriado',
+    });
+
+    await expect(
+      service.revertRejection(r.id, await adminAuth()),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    const updated = await ds.getRepository(Reservation).findOneBy({ id: r.id });
+    expect(updated?.status).toBe(ReservationStatus.REJECTED);
+  });
+
+  it('NO revierte si el horario del día fue desactivado', async () => {
+    const citizen = await createUser(ds);
+    const court = await createCourtResource(ds);
+    // El horario de ese día existe pero quedó INACTIVO después del rechazo.
+    await createSchedule(ds, court.id, dayOfWeekFromISODate(DATE), {
+      isActive: false,
+    });
+    const r = await createReservation(ds, {
+      userId: citizen.id,
+      resourceId: court.id,
+      reservationDate: DATE,
+      startTime: '10:00',
+      endTime: '11:00',
+      status: ReservationStatus.REJECTED,
+    });
+
+    await expect(
+      service.revertRejection(r.id, await adminAuth()),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    const updated = await ds.getRepository(Reservation).findOneBy({ id: r.id });
+    expect(updated?.status).toBe(ReservationStatus.REJECTED);
   });
 });

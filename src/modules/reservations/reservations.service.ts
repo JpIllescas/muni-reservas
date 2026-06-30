@@ -57,7 +57,7 @@ export class ReservationsService {
     private readonly notificationsService: NotificationsService,
 
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
   async create(userId: string, dto: CreateReservationDto) {
     // Envolvemos TODO en una transacción ACID
@@ -507,6 +507,9 @@ export class ReservationsService {
           where: { id: found.resourceId },
           lock: { mode: 'pessimistic_write' },
         });
+        if (!resource) {
+          throw new NotFoundException('Recurso no encontrado.');
+        }
 
         // Admin/operador solo gestiona reservas de recursos de sus sedes (ADM-1).
         if (!user.isSuperAdmin) {
@@ -529,6 +532,28 @@ export class ReservationsService {
           throw new BadRequestException(
             'No se puede revertir una reserva de una fecha pasada.',
           );
+        }
+
+        // La fecha pudo quedar bloqueada despues del rechazo 
+        const exception = await manager.findOne(ResourceException, {
+          where: {
+            resourceId: found.resourceId,
+            exceptionDate: found.reservationDate as any,
+          },
+        });
+        if (exception) {
+          throw new BadRequestException(
+            `El recurso ya no está disponible esa fecha: ${exception.reason}.`,
+          );
+        }
+
+        // El horario de ese dia de la semana pudo desactivar tras el rechazo.
+        const dayOfWeek = dayOfWeekFromISODate(found.reservationDate);
+        const schedule = await manager.findOne(ResourceSchedule, {
+          where: { resourceId: found.resourceId, dayOfWeek, isActive: true },
+        });
+        if (!schedule) {
+          throw new BadRequestException('El recurso ya no atiende ese día.')
         }
 
         // El slot debe seguir libre. Self está REJECTED (inactivo) → no aparece
