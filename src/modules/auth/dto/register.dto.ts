@@ -29,7 +29,10 @@ export class RegisterDto {
   @IsDPI()
   dpi: string;
 
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
+  @Matches(/^\d{8}$/, {
+    message: 'El teléfono debe tener exactamente 8 dígitos.',
+  })
   phone: string;
 }
