@@ -7,6 +7,7 @@ import { ReservationsService } from '../../src/modules/reservations/reservations
 import { PaymentsService } from '../../src/modules/payments/payments.service';
 import { ResourcesService } from '../../src/modules/resources/resources.service';
 import { SedesService } from '../../src/modules/sedes/sedes.service';
+import { UsersService } from '../../src/modules/users/users.service';
 import { AuditService } from '../../src/modules/audit/audit.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 
@@ -48,6 +49,7 @@ export async function createTestModule(): Promise<TestingModule> {
       PaymentsService,
       ResourcesService,
       SedesService,
+      UsersService,
       AuditService,
       { provide: NotificationsService, useValue: notificationsMock },
     ],

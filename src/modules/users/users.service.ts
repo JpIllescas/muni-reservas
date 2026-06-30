@@ -18,7 +18,7 @@ export class UsersService {
     private readonly userRepository: Repository<User>,
 
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   // Obtener todos los usuarios — solo admin
   async findAll() {
@@ -64,7 +64,9 @@ export class UsersService {
   async updateProfile(id: string, dto: UpdateUserDto) {
     const user = await this.findOne(id);
 
-    Object.assign(user, dto);
+    if (dto.fullName !== undefined) user.fullName = dto.fullName;
+    if (dto.phone !== undefined) user.phone = dto.phone;
+
     return this.userRepository.save(user);
   }
 
