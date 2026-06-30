@@ -81,6 +81,15 @@ export class Reservation {
   @Column({ name: 'rejection_reason', nullable: true, type: 'text' })
   rejectionReason: string | null;
 
+  // RES-2: datos de contacto del ENCARGADO de la reserva (a quién llamar/confirmar
+  // el día del evento; puede no ser el titular de la cuenta). Obligatorios en el DTO
+  // de creación; nullable en BD para no romper las reservas previas a RES-2.
+  @Column({ name: 'contact_name', type: 'varchar', nullable: true })
+  contactName: string | null;
+
+  @Column({ name: 'contact_phone', type: 'varchar', nullable: true })
+  contactPhone: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

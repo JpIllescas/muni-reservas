@@ -66,6 +66,8 @@ describe('Concurrencia de create() — doble booking (e2e, BD real)', () => {
       reservationDate,
       startTime: '10:00',
       endTime: '11:00',
+      contactName: 'Encargado Test',
+      contactPhone: '55556666',
     };
 
     // Disparamos las dos creaciones a la vez.
