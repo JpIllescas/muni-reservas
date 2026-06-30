@@ -97,6 +97,8 @@ describe('FLO-1 — recurso sin comprobante (e2e, BD real)', () => {
       reservationDate,
       startTime: '10:00',
       endTime: '11:00',
+      contactName: 'Encargado Test',
+      contactPhone: '55556666',
     });
 
     expect(saved.paymentDeadline).toBeNull();

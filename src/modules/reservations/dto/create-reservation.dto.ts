@@ -32,4 +32,16 @@ export class CreateReservationDto {
     message: 'endTime debe tener formato HH:MM',
   })
   endTime?: string;
+
+  // RES-2: contacto del encargado de la reserva. Obligatorio para toda reserva.
+  @IsNotEmpty()
+  @IsString()
+  contactName: string;
+
+  @IsNotEmpty()
+  @IsString()
+  @Matches(/^\d{8}$/, {
+    message: 'contactPhone debe tener exactamente 8 dígitos.',
+  })
+  contactPhone: string;
 }

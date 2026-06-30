@@ -68,12 +68,16 @@ describe('Límite diario de canchas cross-resource (e2e, BD real)', () => {
         reservationDate,
         startTime: '10:00',
         endTime: '11:00',
+        contactName: 'Encargado Test',
+        contactPhone: '55556666',
       }),
       service.create(user.id, {
         resourceId: courtB.id,
         reservationDate,
         startTime: '10:00',
         endTime: '11:00',
+        contactName: 'Encargado Test',
+        contactPhone: '55556666',
       }),
     ]);
 

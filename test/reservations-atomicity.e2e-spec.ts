@@ -75,6 +75,8 @@ describe('Atomicidad de create() — rollback si falla el log (e2e, BD real)', (
       reservationDate,
       startTime: '10:00',
       endTime: '11:00',
+      contactName: 'Encargado Test',
+      contactPhone: '55556666',
     };
 
     // Enganchamos el subscriber justo antes de la llamada y lo quitamos SIEMPRE

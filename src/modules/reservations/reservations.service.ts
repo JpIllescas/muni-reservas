@@ -259,6 +259,8 @@ export class ReservationsService {
         status: ReservationStatus.PENDING_PAYMENT,
         paymentDeadline,
         totalAmount,
+        contactName: dto.contactName,
+        contactPhone: dto.contactPhone,
       });
 
       const saved = await manager.save(reservation);
