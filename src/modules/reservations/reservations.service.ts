@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, Not, DataSource } from 'typeorm';
+import { Repository, In, Not, DataSource, EntityManager } from 'typeorm';
 import { Reservation } from './entities/reservation.entity';
 import { ReservationLog } from './entities/reservation-log.entity';
 import { Resource } from '../resources/entities/resource.entity';
@@ -13,6 +13,7 @@ import { Payment } from '../payments/entities/payment.entity';
 import { ResourceSchedule } from '../resources/entities/resource-schedule.entity';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationStatusDto } from './dto/update-reservation-status.dto';
+import { ProposeReassignmentDto } from './dto/propose-reassignment.dto';
 import {
   ReservationStatus,
   INACTIVE_RESERVATION_STATUSES,
@@ -44,6 +45,16 @@ export class ReservationsService {
     ],
     [ReservationStatus.PENDING_PAYMENT]: [ReservationStatus.REJECTED],
   };
+
+  // RES-3: estados desde los que se puede PROPONER/ACEPTAR una reasignación.
+  // Activos (se mueven conservando estado) + rejected (revive al nuevo slot,
+  // fallback del breadcrumb de RES-1). Se excluyen expired y cancelled.
+  private readonly reassignableStatuses: ReservationStatus[] = [
+    ReservationStatus.PENDING_PAYMENT,
+    ReservationStatus.UNDER_REVIEW,
+    ReservationStatus.APPROVED,
+    ReservationStatus.REJECTED,
+  ];
 
   constructor(
     @InjectRepository(Reservation)
@@ -689,6 +700,401 @@ export class ReservationsService {
     }
 
     return reservation;
+  }
+
+  // ==========================================================================
+  // RES-3 — Reasignación de horario con aprobación del ciudadano (Shape B).
+  // ==========================================================================
+
+  // El admin/operador PROPONE un nuevo slot. NO valida disponibilidad ni ocupa
+  // el horario (Shape B pto 2): solo lo aparta en proposed_*. Sobrescribe una
+  // propuesta previa (una sola propuesta viva).
+  async proposeReassignment(
+    id: string,
+    dto: ProposeReassignmentDto,
+    user: AuthUser,
+    ipAddress?: string,
+  ) {
+    const reservation = await this.reservationRepository.findOne({
+      where: { id },
+      relations: ['resource'],
+    });
+    if (!reservation) {
+      throw new NotFoundException('Reserva no encontrada.');
+    }
+
+    // Gating de sede (ADM-1): admin/operador solo sobre recursos de sus sedes.
+    if (!user.isSuperAdmin) {
+      assertSedeAccess(user, reservation.resource.sedeId);
+    }
+
+    // Solo se propone sobre estados reasignables (no expired/cancelled).
+    if (!this.reassignableStatuses.includes(reservation.status)) {
+      throw new BadRequestException(
+        `No se puede proponer una reasignación para una reserva en estado "${reservation.status}".`,
+      );
+    }
+
+    const resource = reservation.resource;
+    let proposedStart: string | null = null;
+    let proposedEnd: string | null = null;
+
+    // Validación de FORMA (no de disponibilidad) según el tipo de recurso.
+    if (resource.type === ResourceType.COURT) {
+      if (!dto.proposedStartTime || !dto.proposedEndTime) {
+        throw new BadRequestException(
+          'Para canchas debes proponer hora de inicio y fin.',
+        );
+      }
+      if (
+        hhmmToMinutes(dto.proposedStartTime) >=
+        hhmmToMinutes(dto.proposedEndTime)
+      ) {
+        throw new BadRequestException(
+          'La hora de inicio debe ser estrictamente anterior a la hora de fin.',
+        );
+      }
+      proposedStart = dto.proposedStartTime;
+      proposedEnd = dto.proposedEndTime;
+    }
+    // RANCH: start/end quedan null (día completo).
+
+    reservation.proposedDate = dto.proposedDate;
+    reservation.proposedStartTime = proposedStart;
+    reservation.proposedEndTime = proposedEnd;
+    reservation.proposedBy = user.id;
+    reservation.proposedAt = new Date();
+    await this.reservationRepository.save(reservation);
+
+    await this.auditService.createLog(
+      'Reservation',
+      'PROPOSE_REASSIGNMENT',
+      user.id,
+      id,
+      {
+        date: reservation.reservationDate,
+        startTime: reservation.startTime,
+        endTime: reservation.endTime,
+      },
+      { date: dto.proposedDate, startTime: proposedStart, endTime: proposedEnd },
+      ipAddress,
+    );
+
+    return reservation;
+  }
+
+  // El ciudadano dueño ACEPTA: mueve la reserva al slot propuesto. Todo en una
+  // transacción con pessimistic_write + advisory lock; el backstop de BD
+  // (23P01 / 23505) es la red final si el slot se ocupó en carrera.
+  async acceptReassignment(id: string, user: AuthUser, ipAddress?: string) {
+    const { reservation, fromStatus, toStatus } =
+      await this.dataSource.transaction(async (manager) => {
+        const found = await manager.findOne(Reservation, {
+          where: { id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!found) {
+          throw new NotFoundException('Reserva no encontrada.');
+        }
+        // Solo el dueño acepta su propia reasignación.
+        if (found.userId !== user.id) {
+          throw new ForbiddenException('No tienes permiso sobre esta reserva.');
+        }
+        // Debe haber una propuesta viva.
+        if (!found.proposedDate) {
+          throw new BadRequestException(
+            'Esta reserva no tiene una propuesta de reasignación pendiente.',
+          );
+        }
+        // La reserva pudo caer a expired/cancelled mientras la propuesta esperaba.
+        if (!this.reassignableStatuses.includes(found.status)) {
+          throw new BadRequestException(
+            'La reserva ya no admite reasignación.',
+          );
+        }
+
+        const resource = await manager.findOne(Resource, {
+          where: { id: found.resourceId },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!resource) {
+          throw new NotFoundException('Recurso no encontrado.');
+        }
+        if (
+          !resource.isActive ||
+          resource.status !== ResourceStatus.AVAILABLE
+        ) {
+          throw new BadRequestException(
+            'El recurso no está disponible; no se puede aceptar la reasignación.',
+          );
+        }
+
+        // No aceptar hacia una fecha ya pasada.
+        const now = guatemalaNow();
+        if (found.proposedDate < now.date) {
+          throw new BadRequestException('La fecha propuesta ya pasó.');
+        }
+
+        // Gating de disponibilidad del slot propuesto (EXCLUYE la propia reserva:
+        // en la rama activa aún ocupa su slot viejo y no debe chocar consigo misma).
+        await this.assertSlotAvailable(
+          manager,
+          resource,
+          found.proposedDate,
+          found.proposedStartTime,
+          found.proposedEndTime,
+          found.userId,
+          found.id,
+        );
+
+        const fromStatus = found.status;
+
+        // Mover al slot propuesto.
+        found.reservationDate = found.proposedDate;
+        found.startTime =
+          resource.type === ResourceType.COURT
+            ? found.proposedStartTime
+            : null;
+        found.endTime =
+          resource.type === ResourceType.COURT ? found.proposedEndTime : null;
+
+        // Estado destino: rama activa conserva; rama revivir (rejected) restaura
+        // el estado previo al rechazo (del log) + ventana de pago fresca.
+        let toStatus = fromStatus;
+        if (fromStatus === ReservationStatus.REJECTED) {
+          const rejectLog = await manager.findOne(ReservationLog, {
+            where: { reservationId: id, toStatus: ReservationStatus.REJECTED },
+            order: { createdAt: 'DESC' },
+          });
+          toStatus =
+            rejectLog?.fromStatus ?? ReservationStatus.PENDING_PAYMENT;
+          if (
+            toStatus !== ReservationStatus.UNDER_REVIEW &&
+            toStatus !== ReservationStatus.PENDING_PAYMENT
+          ) {
+            toStatus = ReservationStatus.PENDING_PAYMENT;
+          }
+          found.status = toStatus;
+          found.rejectionReason = null;
+          if (
+            toStatus === ReservationStatus.PENDING_PAYMENT &&
+            resource.type === ResourceType.COURT &&
+            resource.requiresVoucher
+          ) {
+            const deadline = new Date();
+            deadline.setHours(
+              deadline.getHours() + resource.paymentWindowHours,
+            );
+            found.paymentDeadline = deadline;
+          } else {
+            found.paymentDeadline = null;
+          }
+        }
+
+        // Limpiar la propuesta.
+        found.proposedDate = null;
+        found.proposedStartTime = null;
+        found.proposedEndTime = null;
+        found.proposedBy = null;
+        found.proposedAt = null;
+
+        await manager.save(found); // dispara el backstop si el slot ya se ocupó
+
+        const log = new ReservationLog();
+        log.reservationId = id;
+        log.fromStatus = fromStatus;
+        log.toStatus = toStatus;
+        log.changedById = user.id;
+        log.reason = 'Reasignación de horario aceptada por el ciudadano';
+        await manager.save(log);
+
+        const reservation = await manager.findOne(Reservation, {
+          where: { id },
+          relations: ['user', 'resource'],
+        });
+
+        return { reservation, fromStatus, toStatus };
+      });
+
+    await this.auditService.createLog(
+      'Reservation',
+      'ACCEPT_REASSIGNMENT',
+      user.id,
+      id,
+      { status: fromStatus },
+      { status: toStatus },
+      ipAddress,
+    );
+
+    return reservation;
+  }
+
+  // El ciudadano dueño RECHAZA la propuesta: limpia proposed_*; la reserva
+  // queda intacta (mismo slot y estado). No toca columnas reales → sin backstop.
+  async rejectReassignment(id: string, user: AuthUser, ipAddress?: string) {
+    const reservation = await this.reservationRepository.findOne({
+      where: { id },
+    });
+    if (!reservation) {
+      throw new NotFoundException('Reserva no encontrada.');
+    }
+    if (reservation.userId !== user.id) {
+      throw new ForbiddenException('No tienes permiso sobre esta reserva.');
+    }
+    if (!reservation.proposedDate) {
+      throw new BadRequestException(
+        'Esta reserva no tiene una propuesta de reasignación pendiente.',
+      );
+    }
+
+    reservation.proposedDate = null;
+    reservation.proposedStartTime = null;
+    reservation.proposedEndTime = null;
+    reservation.proposedBy = null;
+    reservation.proposedAt = null;
+    await this.reservationRepository.save(reservation);
+
+    await this.auditService.createLog(
+      'Reservation',
+      'REJECT_REASSIGNMENT',
+      user.id,
+      id,
+      { proposal: 'pending' },
+      { proposal: 'rejected' },
+      ipAddress,
+    );
+
+    return { message: 'Propuesta de reasignación rechazada.' };
+  }
+
+  // Gating de disponibilidad compartido (RES-3). Lanza BadRequest si el slot no
+  // está libre; no devuelve nada si está disponible. `excludeReservationId` evita
+  // que una reserva que se mueve choque consigo misma en solape/límite diario.
+  private async assertSlotAvailable(
+    manager: EntityManager,
+    resource: Resource,
+    date: string,
+    startTime: string | null,
+    endTime: string | null,
+    userId: string,
+    excludeReservationId?: string,
+  ): Promise<void> {
+    // Fecha bloqueada por excepción (feriado / mantenimiento).
+    const exception = await manager.findOne(ResourceException, {
+      where: { resourceId: resource.id, exceptionDate: date as any },
+    });
+    if (exception) {
+      throw new BadRequestException(
+        `El recurso no está disponible esa fecha: ${exception.reason}.`,
+      );
+    }
+
+    // Horario activo para ese día de la semana.
+    const dayOfWeek = dayOfWeekFromISODate(date);
+    const schedule = await manager.findOne(ResourceSchedule, {
+      where: { resourceId: resource.id, dayOfWeek, isActive: true },
+    });
+    if (!schedule) {
+      throw new BadRequestException('El recurso no atiende ese día.');
+    }
+
+    if (resource.type === ResourceType.COURT) {
+      if (!startTime || !endTime) {
+        throw new BadRequestException(
+          'Para canchas debes especificar hora de inicio y fin.',
+        );
+      }
+      if (hhmmToMinutes(startTime) >= hhmmToMinutes(endTime)) {
+        throw new BadRequestException(
+          'La hora de inicio debe ser estrictamente anterior a la hora de fin.',
+        );
+      }
+      const durationMinutes =
+        hhmmToMinutes(endTime) - hhmmToMinutes(startTime);
+      if (
+        resource.maxDurationMinutes &&
+        durationMinutes > resource.maxDurationMinutes
+      ) {
+        throw new BadRequestException(
+          `La duración máxima por reserva es de ${resource.maxDurationMinutes} minutos.`,
+        );
+      }
+      if (
+        hhmmToMinutes(startTime) < hhmmToMinutes(schedule.openTime) ||
+        hhmmToMinutes(endTime) > hhmmToMinutes(schedule.closeTime)
+      ) {
+        throw new BadRequestException(
+          `El horario debe estar entre ${schedule.openTime} y ${schedule.closeTime}.`,
+        );
+      }
+
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+        [userId, date],
+      );
+
+      // Límite: 1 cancha activa por usuario por día (excluye la propia reserva).
+      const existingCourtQb = manager
+        .createQueryBuilder(Reservation, 'r')
+        .innerJoin('r.resource', 'res')
+        .where('r.userId = :userId', { userId })
+        .andWhere('r.reservationDate = :date', { date })
+        .andWhere('res.type = :type', { type: ResourceType.COURT })
+        .andWhere('r.status NOT IN (:...statuses)', {
+          statuses: INACTIVE_RESERVATION_STATUSES,
+        });
+      if (excludeReservationId) {
+        existingCourtQb.andWhere('r.id != :excludeId', {
+          excludeId: excludeReservationId,
+        });
+      }
+      if (await existingCourtQb.getOne()) {
+        throw new BadRequestException(
+          'Ya existe una reserva de cancha activa para ese día.',
+        );
+      }
+
+      // Solape de horario (excluye la propia reserva).
+      const conflictingQb = manager
+        .createQueryBuilder(Reservation, 'r')
+        .where('r.resourceId = :resourceId', { resourceId: resource.id })
+        .andWhere('r.reservationDate = :date', { date })
+        .andWhere('r.startTime < :endTime', { endTime })
+        .andWhere('r.endTime > :startTime', { startTime })
+        .andWhere('r.status NOT IN (:...statuses)', {
+          statuses: INACTIVE_RESERVATION_STATUSES,
+        });
+      if (excludeReservationId) {
+        conflictingQb.andWhere('r.id != :excludeId', {
+          excludeId: excludeReservationId,
+        });
+      }
+      if (await conflictingQb.getOne()) {
+        throw new BadRequestException(
+          'Ese horario ya está ocupado. Por favor elige otro.',
+        );
+      }
+    }
+
+    if (resource.type === ResourceType.RANCH) {
+      const existingRanchQb = manager
+        .createQueryBuilder(Reservation, 'r')
+        .where('r.resourceId = :resourceId', { resourceId: resource.id })
+        .andWhere('r.reservationDate = :date', { date })
+        .andWhere('r.status NOT IN (:...statuses)', {
+          statuses: INACTIVE_RESERVATION_STATUSES,
+        });
+      if (excludeReservationId) {
+        existingRanchQb.andWhere('r.id != :excludeId', {
+          excludeId: excludeReservationId,
+        });
+      }
+      if (await existingRanchQb.getOne()) {
+        throw new BadRequestException(
+          'Este rancho ya está reservado para esa fecha.',
+        );
+      }
+    }
   }
 
   // El ciudadano cancela su propia reserva

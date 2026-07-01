@@ -90,6 +90,28 @@ export class Reservation {
   @Column({ name: 'contact_phone', type: 'varchar', nullable: true })
   contactPhone: string | null;
 
+  // RES-3: propuesta de reasignación de horario (Shape B). El admin/operador
+  // propone un nuevo slot aquí sin tocar el estado ni ocupar el horario nuevo;
+  // solo tienen valor mientras hay una propuesta viva. Se limpian (a null) cuando
+  // el ciudadano acepta (se mueven a los campos reales) o rechaza la propuesta.
+  @Column({ name: 'proposed_date', type: 'date', nullable: true })
+  proposedDate: string | null;
+
+  @Column({ name: 'proposed_start_time', type: 'time', nullable: true })
+  proposedStartTime: string | null;
+
+  @Column({ name: 'proposed_end_time', type: 'time', nullable: true })
+  proposedEndTime: string | null;
+
+  // Admin/operador que emitió la propuesta. Columna plana (sin relación) para no
+  // arrastrar un FK que synchronize crearía solo en dev y divergiría de la
+  // migración a mano; igual criterio que contact_*.
+  @Column({ name: 'proposed_by', type: 'uuid', nullable: true })
+  proposedBy: string | null;
+
+  @Column({ name: 'proposed_at', type: 'timestamptz', nullable: true })
+  proposedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

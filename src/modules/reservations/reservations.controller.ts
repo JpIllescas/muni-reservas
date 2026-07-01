@@ -12,6 +12,7 @@ import {
 import { ReservationsService } from './reservations.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationStatusDto } from './dto/update-reservation-status.dto';
+import { ProposeReassignmentDto } from './dto/propose-reassignment.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -77,6 +78,44 @@ export class ReservationsController {
     @Ip() ip: string,
   ) {
     return this.reservationsService.revertRejection(id, user, ip);
+  }
+
+  // POST /api/reservations/:id/propose-reassignment - RES-3 (Shape B).
+  // Admin/operador propone un nuevo slot (misma cancha/rancho). NO ocupa el
+  // horario nuevo ni cambia el estado; solo lo aparta en columnas proposed_*.
+  @Post(':id/propose-reassignment')
+  @Roles(Role.ADMIN, Role.OPERATOR)
+  proposeReassignment(
+    @Param('id') id: string,
+    @Body() dto: ProposeReassignmentDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.reservationsService.proposeReassignment(id, dto, user, ip);
+  }
+
+  // POST /api/reservations/:id/accept-reassignment - RES-3.
+  // El ciudadano dueño acepta: mueve la reserva al slot propuesto (validando
+  // disponibilidad en tx con locks + backstop) y limpia las columnas proposed_*.
+  @Post(':id/accept-reassignment')
+  acceptReassignment(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.reservationsService.acceptReassignment(id, user, ip);
+  }
+
+  // POST /api/reservations/:id/reject-reassignment - RES-3.
+  // El ciudadano dueño rechaza la propuesta: limpia proposed_*; la reserva
+  // queda intacta en su slot y estado originales.
+  @Post(':id/reject-reassignment')
+  rejectReassignment(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.reservationsService.rejectReassignment(id, user, ip);
   }
 
   // PATCH /api/reservations/:id/cancel - el ciudadadno cancela su reserva
