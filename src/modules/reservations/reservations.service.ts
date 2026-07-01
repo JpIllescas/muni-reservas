@@ -10,7 +10,7 @@ import { Reservation } from './entities/reservation.entity';
 import { ReservationLog } from './entities/reservation-log.entity';
 import { Resource } from '../resources/entities/resource.entity';
 import { Payment } from '../payments/entities/payment.entity';
-import { ResourceSchedule } from '../resources/entities/resource-schedule.entity';
+import { resolveEffectiveSchedule } from '../resources/utils/schedule-resolver.util';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationStatusDto } from './dto/update-reservation-status.dto';
 import { ProposeReassignmentDto } from './dto/propose-reassignment.dto';
@@ -30,7 +30,6 @@ import {
   guatemalaNow,
   hhmmToMinutes,
   addDaysToISODate,
-  dayOfWeekFromISODate,
 } from '../../common/utils/date.utils';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { assertSedeAccess } from '../../common/utils/sede-scope.util';
@@ -131,15 +130,13 @@ export class ReservationsService {
         );
       }
 
-      // ¿Existe un horario activo para ese dia de la semana?
-      const dayOfWeek = dayOfWeekFromISODate(dto.reservationDate);
-      const schedule = await manager.findOne(ResourceSchedule, {
-        where: {
-          resourceId: dto.resourceId,
-          dayOfWeek,
-          isActive: true,
-        },
-      });
+      // Horario EFECTIVO del día: override por fecha (REC-3) > semanal. Si la
+      // fecha estaba bloqueada, ya se cortó arriba (el bloqueo tiene precedencia).
+      const schedule = await resolveEffectiveSchedule(
+        manager,
+        dto.resourceId,
+        dto.reservationDate,
+      );
       if (!schedule) {
         throw new BadRequestException('El recurso no atiende ese dia.');
       }
@@ -560,13 +557,15 @@ export class ReservationsService {
           );
         }
 
-        // El horario de ese dia de la semana pudo desactivar tras el rechazo.
-        const dayOfWeek = dayOfWeekFromISODate(found.reservationDate);
-        const schedule = await manager.findOne(ResourceSchedule, {
-          where: { resourceId: found.resourceId, dayOfWeek, isActive: true },
-        });
+        // Horario EFECTIVO del día (override REC-3 > semanal); pudo cambiar tras
+        // el rechazo. El bloqueo por excepción ya se validó arriba (mayor precedencia).
+        const schedule = await resolveEffectiveSchedule(
+          manager,
+          found.resourceId,
+          found.reservationDate,
+        );
         if (!schedule) {
-          throw new BadRequestException('El recurso ya no atiende ese día.')
+          throw new BadRequestException('El recurso ya no atiende ese día.');
         }
 
         // El slot debe seguir libre. Self está REJECTED (inactivo) → no aparece
@@ -989,11 +988,8 @@ export class ReservationsService {
       );
     }
 
-    // Horario activo para ese día de la semana.
-    const dayOfWeek = dayOfWeekFromISODate(date);
-    const schedule = await manager.findOne(ResourceSchedule, {
-      where: { resourceId: resource.id, dayOfWeek, isActive: true },
-    });
+    // Horario EFECTIVO del día: override por fecha (REC-3) > semanal.
+    const schedule = await resolveEffectiveSchedule(manager, resource.id, date);
     if (!schedule) {
       throw new BadRequestException('El recurso no atiende ese día.');
     }
