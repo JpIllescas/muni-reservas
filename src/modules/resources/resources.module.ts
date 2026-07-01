@@ -6,6 +6,7 @@ import { Resource } from './entities/resource.entity';
 import { Sede } from './entities/sede.entity';
 import { ResourceSchedule } from './entities/resource-schedule.entity';
 import { ResourceException } from './entities/resource-exception.entity';
+import { ResourceScheduleOverride } from './entities/resource-schedule-override.entity';
 import { Reservation } from '../reservations/entities/reservation.entity';
 
 @Module({
@@ -15,6 +16,7 @@ import { Reservation } from '../reservations/entities/reservation.entity';
       Sede,
       ResourceSchedule,
       ResourceException,
+      ResourceScheduleOverride,
       Reservation,
     ]),
   ],

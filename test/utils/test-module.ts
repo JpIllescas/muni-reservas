@@ -17,6 +17,7 @@ import { Resource } from '../../src/modules/resources/entities/resource.entity';
 import { Sede } from '../../src/modules/resources/entities/sede.entity';
 import { ResourceSchedule } from '../../src/modules/resources/entities/resource-schedule.entity';
 import { ResourceException } from '../../src/modules/resources/entities/resource-exception.entity';
+import { ResourceScheduleOverride } from '../../src/modules/resources/entities/resource-schedule-override.entity';
 import { Payment } from '../../src/modules/payments/entities/payment.entity';
 import { User } from '../../src/modules/users/entities/user.entity';
 import { AuditLog } from '../../src/modules/audit/entities/audit-log.entity';
@@ -39,6 +40,7 @@ export async function createTestModule(): Promise<TestingModule> {
         Sede,
         ResourceSchedule,
         ResourceException,
+        ResourceScheduleOverride,
         Payment,
         User,
         AuditLog,

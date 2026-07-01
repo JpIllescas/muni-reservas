@@ -16,6 +16,7 @@ export async function cleanDatabase(ds: DataSource): Promise<void> {
         reservation_logs,
         reservations,
         resource_exceptions,
+        resource_schedule_overrides,
         resource_schedules,
         resources,
         user_sedes,

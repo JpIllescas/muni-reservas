@@ -16,6 +16,7 @@ import { CreateResourceDto } from './dto/create-resource.dto';
 import { UpdateResourceDto } from './dto/update-resource.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { CreateExceptionDto } from './dto/create-exception.dto';
+import { CreateScheduleOverrideDto } from './dto/create-schedule-override.dto';
 import { UpdateResourceStatusDto } from './dto/update-resource-status.dto';
 import { AvailabilityQueryDto } from './dto/availability-query.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -170,5 +171,41 @@ export class ResourcesController {
     @Ip() ip: string,
   ) {
     return this.resourcesService.removeException(exceptionId, user, ip);
+  }
+
+  // POST /api/resources/:id/schedule-overrides — admin y operador (REC-3)
+  @Post(':id/schedule-overrides')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OPERATOR)
+  addScheduleOverride(
+    @Param('id') id: string,
+    @Body() dto: CreateScheduleOverrideDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.resourcesService.addScheduleOverride(id, dto, user, ip);
+  }
+
+  // GET /api/resources/:id/schedule-overrides — admin y operador (REC-3)
+  @Get(':id/schedule-overrides')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OPERATOR)
+  getScheduleOverrides(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.resourcesService.getScheduleOverrides(id, user);
+  }
+
+  // DELETE /api/resources/schedule-overrides/:overrideId — admin y operador (REC-3)
+  @Delete('schedule-overrides/:overrideId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OPERATOR)
+  removeScheduleOverride(
+    @Param('overrideId') overrideId: string,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.resourcesService.removeScheduleOverride(overrideId, user, ip);
   }
 }

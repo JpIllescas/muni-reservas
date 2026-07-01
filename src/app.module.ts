@@ -20,6 +20,7 @@ import { Payment } from './modules/payments/entities/payment.entity';
 import { AuditLog } from './modules/audit/entities/audit-log.entity';
 import { SystemConfig } from './modules/config/entities/system-config.entity';
 import { ResourceException } from './modules/resources/entities/resource-exception.entity';
+import { ResourceScheduleOverride } from './modules/resources/entities/resource-schedule-override.entity';
 
 //Modulos
 import { AuthModule } from './modules/auth/auth.module';
@@ -71,6 +72,7 @@ import { SedesModule } from './modules/sedes/sedes.module';
             Sede,
             ResourceSchedule,
             ResourceException,
+            ResourceScheduleOverride,
             Reservation,
             ReservationLog,
             Payment,

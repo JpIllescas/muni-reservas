@@ -9,20 +9,20 @@ import { Resource } from './entities/resource.entity';
 import { Sede } from './entities/sede.entity';
 import { ResourceSchedule } from './entities/resource-schedule.entity';
 import { ResourceException } from './entities/resource-exception.entity';
+import { ResourceScheduleOverride } from './entities/resource-schedule-override.entity';
 import { Reservation } from '../reservations/entities/reservation.entity';
 import { CreateResourceDto } from './dto/create-resource.dto';
 import { UpdateResourceDto } from './dto/update-resource.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { CreateExceptionDto } from './dto/create-exception.dto';
+import { CreateScheduleOverrideDto } from './dto/create-schedule-override.dto';
 import { UpdateResourceStatusDto } from './dto/update-resource-status.dto';
 import { AuditService } from '../audit/audit.service';
 import { ResourceType } from '../../common/enums/resource-type.enum';
 import { ResourceStatus } from '../../common/enums/resource-status.enum';
 import { INACTIVE_RESERVATION_STATUSES } from '../../common/enums/reservation-status.enum';
-import {
-  dayOfWeekFromISODate,
-  guatemalaNow,
-} from '../../common/utils/date.utils';
+import { guatemalaNow, hhmmToMinutes } from '../../common/utils/date.utils';
+import { resolveEffectiveSchedule } from './utils/schedule-resolver.util';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { assertSedeAccess } from '../../common/utils/sede-scope.util';
 
@@ -40,6 +40,9 @@ export class ResourcesService {
 
     @InjectRepository(ResourceException)
     private readonly exceptionRepository: Repository<ResourceException>,
+
+    @InjectRepository(ResourceScheduleOverride)
+    private readonly overrideRepository: Repository<ResourceScheduleOverride>,
 
     @InjectRepository(Reservation)
     private readonly reservationRepository: Repository<Reservation>,
@@ -135,13 +138,15 @@ export class ResourcesService {
       where: { resourceId, exceptionDate: date as any },
     });
 
-    // Horario activo para ese día de la semana (0=domingo..6=sábado).
-    const dayOfWeek = dayOfWeekFromISODate(date);
+    // Horario EFECTIVO del día: override por fecha (REC-3) > semanal. Si la fecha
+    // está bloqueada (excepción, REC-1) ni se resuelve: el bloqueo gana.
     const schedule = exception
       ? null
-      : await this.scheduleRepository.findOne({
-          where: { resourceId, dayOfWeek, isActive: true },
-        });
+      : await resolveEffectiveSchedule(
+          this.scheduleRepository.manager,
+          resourceId,
+          date,
+        );
 
     // Reservas vivas de ese recurso/fecha (las mismas que ocupan el slot en create()).
     const reservations = await this.reservationRepository.find({
@@ -464,6 +469,133 @@ export class ResourcesService {
     );
 
     return { message: 'Fecha desbloqueada correctamente.' };
+  }
+
+  // REC-3: crear un horario especial (override) para una fecha concreta. Gana
+  // sobre el horario semanal ESE día (abre un día cerrado o cambia las horas).
+  // NO sirve para cerrar (eso es addException). El override solo afecta reservas
+  // NUEVAS; no toca ni valida las reservas vivas (misma postura que REC-1/REC-2).
+  async addScheduleOverride(
+    resourceId: string,
+    dto: CreateScheduleOverrideDto,
+    user: AuthUser,
+    ipAddress?: string,
+  ) {
+    const resource = await this.resourceRepository.findOne({
+      where: { id: resourceId },
+    });
+
+    if (!resource) {
+      throw new NotFoundException('Recurso no encontrado.');
+    }
+
+    // ADM-1: solo recursos de las sedes del actor.
+    assertSedeAccess(user, resource.sedeId);
+
+    // No se define un horario especial para una fecha pasada.
+    if (dto.overrideDate < guatemalaNow().date) {
+      throw new BadRequestException(
+        'No se puede definir un horario para una fecha que ya pasó.',
+      );
+    }
+
+    // La ventana debe ser válida (inicio estrictamente antes del fin).
+    if (hhmmToMinutes(dto.openTime) >= hhmmToMinutes(dto.closeTime)) {
+      throw new BadRequestException(
+        'La hora de apertura debe ser anterior a la de cierre.',
+      );
+    }
+
+    // Un solo override por recurso/fecha (no hay unique en BD: se valida acá).
+    const existing = await this.overrideRepository.findOne({
+      where: { resourceId, overrideDate: dto.overrideDate },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        'Esa fecha ya tiene un horario especial definido.',
+      );
+    }
+
+    const override = this.overrideRepository.create({
+      resourceId,
+      overrideDate: dto.overrideDate,
+      openTime: dto.openTime,
+      closeTime: dto.closeTime,
+      slotDurationMin: dto.slotDurationMin ?? null,
+      createdById: user.id,
+    });
+    const saved = await this.overrideRepository.save(override);
+
+    await this.auditService.createLog(
+      'ResourceScheduleOverride',
+      'CREATE',
+      user.id,
+      saved.id,
+      undefined,
+      { ...dto, resourceId },
+      ipAddress,
+    );
+
+    return saved;
+  }
+
+  // Listar los horarios especiales de un recurso (panel admin).
+  async getScheduleOverrides(resourceId: string, user: AuthUser) {
+    const resource = await this.resourceRepository.findOne({
+      where: { id: resourceId },
+    });
+
+    if (!resource) {
+      throw new NotFoundException('Recurso no encontrado.');
+    }
+
+    // ADM-1: solo recursos de las sedes del actor.
+    assertSedeAccess(user, resource.sedeId);
+
+    return this.overrideRepository.find({
+      where: { resourceId },
+      order: { overrideDate: 'ASC' },
+    });
+  }
+
+  // Eliminar un horario especial (hard delete; el audit log guarda el valor previo).
+  async removeScheduleOverride(
+    overrideId: string,
+    user: AuthUser,
+    ipAddress?: string,
+  ) {
+    const override = await this.overrideRepository.findOne({
+      where: { id: overrideId },
+    });
+
+    if (!override) {
+      throw new NotFoundException('Horario especial no encontrado.');
+    }
+
+    // ADM-1: el override pertenece a un recurso → acotar por su sede.
+    const resource = await this.resourceRepository.findOne({
+      where: { id: override.resourceId },
+    });
+    assertSedeAccess(user, resource!.sedeId);
+
+    await this.overrideRepository.remove(override);
+
+    await this.auditService.createLog(
+      'ResourceScheduleOverride',
+      'DELETE',
+      user.id,
+      overrideId,
+      {
+        resourceId: override.resourceId,
+        overrideDate: override.overrideDate,
+        openTime: override.openTime,
+        closeTime: override.closeTime,
+      },
+      undefined,
+      ipAddress,
+    );
+
+    return { message: 'Horario especial eliminado correctamente.' };
   }
 
   // REC-2: cambiar el estado operativo del recurso (available / maintenance /
