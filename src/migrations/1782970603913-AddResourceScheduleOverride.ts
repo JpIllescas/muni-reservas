@@ -11,9 +11,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 // `synchronize` genera en dev → la misma tabla lleva nombres distintos en dev vs prod.
 // Inocuo hoy (este `down()` dropea lo que este `up()` creó); solo importaría si un
 // futuro `migration:generate` intentara dropear estos FK por su nombre hash.
-export class AddResourceScheduleOverride1782970603913
-  implements MigrationInterface
-{
+export class AddResourceScheduleOverride1782970603913 implements MigrationInterface {
   name = 'AddResourceScheduleOverride1782970603913';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

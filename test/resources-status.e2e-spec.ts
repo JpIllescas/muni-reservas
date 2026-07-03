@@ -56,7 +56,10 @@ describe('resource status — REC-2 (e2e, BD real)', () => {
 
     const saved = await service.updateStatus(
       court.id,
-      { status: ResourceStatus.MAINTENANCE, statusReason: 'Cancha en reparación' },
+      {
+        status: ResourceStatus.MAINTENANCE,
+        statusReason: 'Cancha en reparación',
+      },
       await adminAuth(),
     );
 

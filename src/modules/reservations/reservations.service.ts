@@ -14,6 +14,7 @@ import { resolveEffectiveSchedule } from '../resources/utils/schedule-resolver.u
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationStatusDto } from './dto/update-reservation-status.dto';
 import { ProposeReassignmentDto } from './dto/propose-reassignment.dto';
+import { ApplyDiscountDto } from './dto/apply-discount.dto';
 import {
   ReservationStatus,
   INACTIVE_RESERVATION_STATUSES,
@@ -55,6 +56,14 @@ export class ReservationsService {
     ReservationStatus.REJECTED,
   ];
 
+  // FLO-2: estados en los que el descuento aún puede cambiar: mientras el pago
+  // no está resuelto. Tras aprobar (o rechazar/expirar/cancelar) el monto queda
+  // congelado tal como se revisó.
+  private readonly discountableStatuses: ReservationStatus[] = [
+    ReservationStatus.PENDING_PAYMENT,
+    ReservationStatus.UNDER_REVIEW,
+  ];
+
   constructor(
     @InjectRepository(Reservation)
     private readonly reservationRepository: Repository<Reservation>,
@@ -67,7 +76,7 @@ export class ReservationsService {
     private readonly notificationsService: NotificationsService,
 
     private readonly dataSource: DataSource,
-  ) { }
+  ) {}
 
   async create(userId: string, dto: CreateReservationDto) {
     // Envolvemos TODO en una transacción ACID
@@ -491,6 +500,108 @@ export class ReservationsService {
     return reservation;
   }
 
+  // FLO-2: descuento por carta/oferta (monto FIJO en Q), solo ADMIN. totalAmount
+  // queda SIEMPRE como el monto final a pagar (ARQ-1: el front nunca calcula);
+  // el original se reconstruye sumando el descuento vigente, así que re-aplicar
+  // recalcula desde el original (corrige sin tener que quitar antes) y amount=0
+  // elimina el descuento. Genérico para cualquier recurso (Florencia es el caso
+  // que lo motiva), solo mientras el pago no está resuelto.
+  async applyDiscount(
+    id: string,
+    dto: ApplyDiscountDto,
+    user: AuthUser,
+    ipAddress?: string,
+  ) {
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
+    const { reservation, oldValues } = await this.dataSource.transaction(
+      async (manager) => {
+        // Candado pesimista: serializa contra updateStatus/reasignaciones que
+        // leen o congelan el monto en paralelo.
+        const found = await manager.findOne(Reservation, {
+          where: { id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!found) {
+          throw new NotFoundException('Reserva no encontrada.');
+        }
+
+        // ADM-1: solo reservas de recursos de las sedes del actor.
+        const resource = await manager.findOne(Resource, {
+          where: { id: found.resourceId },
+        });
+        if (!user.isSuperAdmin) {
+          assertSedeAccess(user, resource!.sedeId);
+        }
+
+        if (!this.discountableStatuses.includes(found.status)) {
+          throw new BadRequestException(
+            'Solo se puede modificar el descuento mientras la reserva está pendiente de pago o en revisión.',
+          );
+        }
+
+        // Monto original (sin descuento): base para aplicar, corregir o quitar.
+        const original = round2(
+          found.totalAmount + (found.discountAmount ?? 0),
+        );
+        const oldValues = {
+          totalAmount: found.totalAmount,
+          discountAmount: found.discountAmount,
+          discountReason: found.discountReason,
+        };
+
+        if (dto.amount === 0) {
+          if (found.discountAmount === null) {
+            throw new BadRequestException(
+              'La reserva no tiene un descuento que quitar.',
+            );
+          }
+          found.discountAmount = null;
+          found.discountReason = null;
+          found.discountAppliedBy = null;
+          found.discountAppliedAt = null;
+          found.totalAmount = original;
+        } else {
+          if (!dto.reason) {
+            throw new BadRequestException(
+              'El descuento requiere una justificación (carta u oferta).',
+            );
+          }
+          if (dto.amount > original) {
+            throw new BadRequestException(
+              `El descuento (Q${dto.amount}) no puede exceder el monto original (Q${original}).`,
+            );
+          }
+          found.discountAmount = dto.amount;
+          found.discountReason = dto.reason;
+          found.discountAppliedBy = user.id;
+          found.discountAppliedAt = new Date();
+          found.totalAmount = round2(original - dto.amount);
+        }
+
+        await manager.save(found);
+        return { reservation: found, oldValues };
+      },
+    );
+
+    // Auditoría fuera de la transacción (mismo criterio que updateStatus).
+    await this.auditService.createLog(
+      'Reservation',
+      dto.amount === 0 ? 'REMOVE_DISCOUNT' : 'APPLY_DISCOUNT',
+      user.id,
+      id,
+      oldValues,
+      {
+        totalAmount: reservation.totalAmount,
+        discountAmount: reservation.discountAmount,
+        discountReason: reservation.discountReason,
+      },
+      ipAddress,
+    );
+
+    return reservation;
+  }
+
   // RES-1: el admin revierte un rechazo hecho por error, SOLO si el horario
   // original sigue libre. Si ya fue tomado, se rechaza y queda para la
   // reasignación con aprobación del ciudadano (RES-3, futuro). Restaura el estado
@@ -523,13 +634,13 @@ export class ReservationsService {
 
         // Admin/operador solo gestiona reservas de recursos de sus sedes (ADM-1).
         if (!user.isSuperAdmin) {
-          assertSedeAccess(user, resource!.sedeId);
+          assertSedeAccess(user, resource.sedeId);
         }
 
         // El recurso debe poder recibir reservas (activo y disponible).
         if (
-          !resource!.isActive ||
-          resource!.status !== ResourceStatus.AVAILABLE
+          !resource.isActive ||
+          resource.status !== ResourceStatus.AVAILABLE
         ) {
           throw new BadRequestException(
             'El recurso no está disponible; no se puede revertir la reserva.',
@@ -544,7 +655,7 @@ export class ReservationsService {
           );
         }
 
-        // La fecha pudo quedar bloqueada despues del rechazo 
+        // La fecha pudo quedar bloqueada despues del rechazo
         const exception = await manager.findOne(ResourceException, {
           where: {
             resourceId: found.resourceId,
@@ -570,7 +681,7 @@ export class ReservationsService {
 
         // El slot debe seguir libre. Self está REJECTED (inactivo) → no aparece
         // en estas consultas, no hace falta excluirlo explícitamente.
-        if (resource!.type === ResourceType.COURT) {
+        if (resource.type === ResourceType.COURT) {
           await manager.query(
             'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
             [found.userId, found.reservationDate],
@@ -615,7 +726,7 @@ export class ReservationsService {
           }
         }
 
-        if (resource!.type === ResourceType.RANCH) {
+        if (resource.type === ResourceType.RANCH) {
           const existingRanch = await manager.findOne(Reservation, {
             where: {
               resourceId: found.resourceId,
@@ -651,11 +762,11 @@ export class ReservationsService {
         // le da una ventana de pago FRESCA (si no, el cron lo re-expira al toque).
         if (
           toStatus === ReservationStatus.PENDING_PAYMENT &&
-          resource!.type === ResourceType.COURT &&
-          resource!.requiresVoucher
+          resource.type === ResourceType.COURT &&
+          resource.requiresVoucher
         ) {
           const deadline = new Date();
-          deadline.setHours(deadline.getHours() + resource!.paymentWindowHours);
+          deadline.setHours(deadline.getHours() + resource.paymentWindowHours);
           found.paymentDeadline = deadline;
         } else {
           found.paymentDeadline = null;
@@ -775,7 +886,11 @@ export class ReservationsService {
         startTime: reservation.startTime,
         endTime: reservation.endTime,
       },
-      { date: dto.proposedDate, startTime: proposedStart, endTime: proposedEnd },
+      {
+        date: dto.proposedDate,
+        startTime: proposedStart,
+        endTime: proposedEnd,
+      },
       ipAddress,
     );
 
@@ -851,9 +966,7 @@ export class ReservationsService {
         // Mover al slot propuesto.
         found.reservationDate = found.proposedDate;
         found.startTime =
-          resource.type === ResourceType.COURT
-            ? found.proposedStartTime
-            : null;
+          resource.type === ResourceType.COURT ? found.proposedStartTime : null;
         found.endTime =
           resource.type === ResourceType.COURT ? found.proposedEndTime : null;
 
@@ -865,8 +978,7 @@ export class ReservationsService {
             where: { reservationId: id, toStatus: ReservationStatus.REJECTED },
             order: { createdAt: 'DESC' },
           });
-          toStatus =
-            rejectLog?.fromStatus ?? ReservationStatus.PENDING_PAYMENT;
+          toStatus = rejectLog?.fromStatus ?? ReservationStatus.PENDING_PAYMENT;
           if (
             toStatus !== ReservationStatus.UNDER_REVIEW &&
             toStatus !== ReservationStatus.PENDING_PAYMENT
@@ -1005,8 +1117,7 @@ export class ReservationsService {
           'La hora de inicio debe ser estrictamente anterior a la hora de fin.',
         );
       }
-      const durationMinutes =
-        hhmmToMinutes(endTime) - hhmmToMinutes(startTime);
+      const durationMinutes = hhmmToMinutes(endTime) - hhmmToMinutes(startTime);
       if (
         resource.maxDurationMinutes &&
         durationMinutes > resource.maxDurationMinutes

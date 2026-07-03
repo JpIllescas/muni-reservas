@@ -112,6 +112,34 @@ export class Reservation {
   @Column({ name: 'proposed_at', type: 'timestamptz', nullable: true })
   proposedAt: Date | null;
 
+  // FLO-2: descuento por carta/oferta aplicado por un admin. `totalAmount`
+  // SIEMPRE queda como el monto FINAL a pagar (ARQ-1: el front solo muestra);
+  // estas columnas dejan constancia de cuánto se rebajó y por qué. El monto
+  // original se reconstruye como totalAmount + discountAmount. `discount_applied_by`
+  // es columna plana sin FK (mismo criterio que proposed_by/contact_*).
+  @Column({
+    name: 'discount_amount',
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    transformer: {
+      to: (value: number | null) => value,
+      from: (value: string | null) =>
+        value === null ? null : parseFloat(value),
+    },
+  })
+  discountAmount: number | null;
+
+  @Column({ name: 'discount_reason', type: 'text', nullable: true })
+  discountReason: string | null;
+
+  @Column({ name: 'discount_applied_by', type: 'uuid', nullable: true })
+  discountAppliedBy: string | null;
+
+  @Column({ name: 'discount_applied_at', type: 'timestamptz', nullable: true })
+  discountAppliedAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
