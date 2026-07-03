@@ -9,9 +9,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 // Escrita a mano (NO migration:generate) para no re-DROPear el backstop, igual
 // que RES-2 / FLO-1 / REC-2. Columnas nullable: solo tienen valor mientras hay
 // una propuesta viva; se limpian al aceptar o rechazar.
-export class AddReservationReassignment1782884203913
-  implements MigrationInterface
-{
+export class AddReservationReassignment1782884203913 implements MigrationInterface {
   name = 'AddReservationReassignment1782884203913';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

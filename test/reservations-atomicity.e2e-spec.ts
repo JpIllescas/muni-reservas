@@ -1,5 +1,5 @@
 import { TestingModule } from '@nestjs/testing';
-import { DataSource, EntitySubscriberInterface, InsertEvent } from 'typeorm';
+import { DataSource, EntitySubscriberInterface } from 'typeorm';
 
 import { ReservationsService } from '../src/modules/reservations/reservations.service';
 import { Reservation } from '../src/modules/reservations/entities/reservation.entity';
@@ -32,7 +32,7 @@ class FailingLogSubscriber implements EntitySubscriberInterface<ReservationLog> 
   listenTo() {
     return ReservationLog;
   }
-  beforeInsert(_event: InsertEvent<ReservationLog>) {
+  beforeInsert() {
     throw new Error(
       'Fallo inyectado al insertar ReservationLog (test de rollback).',
     );

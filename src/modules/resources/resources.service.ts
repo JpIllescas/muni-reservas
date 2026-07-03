@@ -471,6 +471,38 @@ export class ResourcesService {
     return { message: 'Fecha desbloqueada correctamente.' };
   }
 
+  // REC-4: reservas vivas de un recurso en una fecha (asignación ante imprevistos).
+  // Es el paso previo a bloquear la fecha (REC-1): addException rechaza mientras
+  // haya reservas activas ese día, y este listado se las muestra al admin (con el
+  // contacto del encargado) para reasignarlas una a una vía RES-3
+  // (propose-reassignment) antes de volver a intentar el bloqueo.
+  async getAffectedReservations(
+    resourceId: string,
+    date: string,
+    user: AuthUser,
+  ) {
+    const resource = await this.resourceRepository.findOne({
+      where: { id: resourceId },
+    });
+
+    if (!resource) {
+      throw new NotFoundException('Recurso no encontrado.');
+    }
+
+    // ADM-1: solo recursos de las sedes del actor.
+    assertSedeAccess(user, resource.sedeId);
+
+    return this.reservationRepository.find({
+      where: {
+        resourceId,
+        reservationDate: date,
+        status: Not(In(INACTIVE_RESERVATION_STATUSES)),
+      },
+      relations: ['user'],
+      order: { startTime: 'ASC' },
+    });
+  }
+
   // REC-3: crear un horario especial (override) para una fecha concreta. Gana
   // sobre el horario semanal ESE día (abre un día cerrado o cambia las horas).
   // NO sirve para cerrar (eso es addException). El override solo afecta reservas

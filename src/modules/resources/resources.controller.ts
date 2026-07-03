@@ -173,6 +173,20 @@ export class ResourcesController {
     return this.resourcesService.removeException(exceptionId, user, ip);
   }
 
+  // GET /api/resources/:id/affected-reservations?date=YYYY-MM-DD — admin y
+  // operador (REC-4): reservas vivas de esa fecha, para reasignarlas (RES-3)
+  // antes de bloquear el día (REC-1).
+  @Get(':id/affected-reservations')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.OPERATOR)
+  getAffectedReservations(
+    @Param('id') id: string,
+    @Query() query: AvailabilityQueryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.resourcesService.getAffectedReservations(id, query.date, user);
+  }
+
   // POST /api/resources/:id/schedule-overrides — admin y operador (REC-3)
   @Post(':id/schedule-overrides')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -190,10 +204,7 @@ export class ResourcesController {
   @Get(':id/schedule-overrides')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.OPERATOR)
-  getScheduleOverrides(
-    @Param('id') id: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  getScheduleOverrides(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.resourcesService.getScheduleOverrides(id, user);
   }
 

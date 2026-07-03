@@ -16,8 +16,6 @@ import { UploadVoucherDto } from './dto/upload-voucher.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { Role } from '../../common/enums/role.enum';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 
 @UseGuards(JwtAuthGuard, RolesGuard)

@@ -86,7 +86,12 @@ describe('schedule override — REC-3 (e2e, BD real)', () => {
     await createSchedule(ds, court.id, dayOfWeekFromISODate(date));
     await service.addScheduleOverride(
       court.id,
-      { overrideDate: date, openTime: '08:00', closeTime: '12:00', slotDurationMin: 60 },
+      {
+        overrideDate: date,
+        openTime: '08:00',
+        closeTime: '12:00',
+        slotDurationMin: 60,
+      },
       await adminAuth(),
     );
 
@@ -120,7 +125,12 @@ describe('schedule override — REC-3 (e2e, BD real)', () => {
     // Misma fecha con override Y bloqueo: el bloqueo tiene precedencia.
     await service.addScheduleOverride(
       court.id,
-      { overrideDate: date, openTime: '08:00', closeTime: '12:00', slotDurationMin: 60 },
+      {
+        overrideDate: date,
+        openTime: '08:00',
+        closeTime: '12:00',
+        slotDurationMin: 60,
+      },
       await adminAuth(),
     );
     await service.addException(
@@ -152,7 +162,12 @@ describe('schedule override — REC-3 (e2e, BD real)', () => {
     await createSchedule(ds, court.id, dayOfWeekFromISODate(date)); // 08–20
     await service.addScheduleOverride(
       court.id,
-      { overrideDate: date, openTime: '08:00', closeTime: '12:00', slotDurationMin: 60 },
+      {
+        overrideDate: date,
+        openTime: '08:00',
+        closeTime: '12:00',
+        slotDurationMin: 60,
+      },
       await adminAuth(),
     );
 
@@ -211,7 +226,12 @@ describe('schedule override — REC-3 (e2e, BD real)', () => {
     await createSchedule(ds, court.id, dayOfWeekFromISODate(date)); // 08–20
     const override = await service.addScheduleOverride(
       court.id,
-      { overrideDate: date, openTime: '08:00', closeTime: '12:00', slotDurationMin: 60 },
+      {
+        overrideDate: date,
+        openTime: '08:00',
+        closeTime: '12:00',
+        slotDurationMin: 60,
+      },
       await adminAuth(),
     );
 

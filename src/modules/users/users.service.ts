@@ -1,15 +1,10 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { AuditService } from '../audit/audit.service';
-import { Role } from '../../common/enums/role.enum';
 
 @Injectable()
 export class UsersService {
@@ -18,7 +13,7 @@ export class UsersService {
     private readonly userRepository: Repository<User>,
 
     private readonly auditService: AuditService,
-  ) { }
+  ) {}
 
   // Obtener todos los usuarios — solo admin
   async findAll() {

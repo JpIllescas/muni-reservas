@@ -14,9 +14,7 @@ export class AddResourceStatus1782365014504 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "resources" ADD "status" "public"."resources_status_enum" NOT NULL DEFAULT 'available'`,
     );
-    await queryRunner.query(
-      `ALTER TABLE "resources" ADD "status_reason" text`,
-    );
+    await queryRunner.query(`ALTER TABLE "resources" ADD "status_reason" text`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

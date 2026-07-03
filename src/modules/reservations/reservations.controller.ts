@@ -13,6 +13,7 @@ import { ReservationsService } from './reservations.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationStatusDto } from './dto/update-reservation-status.dto';
 import { ProposeReassignmentDto } from './dto/propose-reassignment.dto';
+import { ApplyDiscountDto } from './dto/apply-discount.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -66,6 +67,20 @@ export class ReservationsController {
     @Ip() ip: string,
   ) {
     return this.reservationsService.updateStatus(id, dto, user, ip);
+  }
+
+  // PATCH /api/reservations/:id/discount - descuento por carta/oferta (FLO-2).
+  // Solo admin. amount > 0 aplica/reemplaza el descuento (reason obligatoria);
+  // amount = 0 lo quita. totalAmount queda como el monto final a pagar.
+  @Patch(':id/discount')
+  @Roles(Role.ADMIN)
+  applyDiscount(
+    @Param('id') id: string,
+    @Body() dto: ApplyDiscountDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.reservationsService.applyDiscount(id, dto, user, ip);
   }
 
   // PATCH /api/reservations/:id/revert-rejection - revertir un rechazo (RES-1).
