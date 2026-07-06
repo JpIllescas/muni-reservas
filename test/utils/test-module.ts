@@ -25,6 +25,7 @@ import { AuditLog } from '../../src/modules/audit/entities/audit-log.entity';
 // Mock no-op de notificaciones: los tests NO deben tocar el servidor SMTP.
 const notificationsMock = {
   sendReservationStatusEmail: jest.fn().mockResolvedValue(undefined),
+  sendReassignmentProposalEmail: jest.fn().mockResolvedValue(undefined),
 };
 
 // Levanta un módulo Nest mínimo con la BD de TEST real y el ReservationsService

@@ -19,19 +19,18 @@ import { NotificationsModule } from '../notifications/notifications.module';
     TypeOrmModule.forFeature([User, OtpCode]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => {
+      useFactory: (configService: ConfigService) => {
         const secret = configService.get<string>('JWT_SECRET');
+        // JWT_EXPIRES_IN admite "7d"/"24h" o un número en SEGUNDOS ("604800").
+        // Gotcha: jsonwebtoken interpreta la STRING numérica como MILISEGUNDOS
+        // ("604800" ≈ 10 min), por eso se convierte a number (= segundos).
+        const rawExpiry = configService.get<string>('JWT_EXPIRES_IN')!;
+        const expiresIn = /^\d+$/.test(rawExpiry)
+          ? Number(rawExpiry)
+          : (rawExpiry as import('ms').StringValue);
         return {
           secret,
-          signOptions: {
-            // Antes estaba hardcodeado en 604800 (7d). Ahora respeta la variable
-            // de entorno JWT_EXPIRES_IN (exigida por Joi), p. ej. "7d". El cast
-            // es porque jsonwebtoken tipa expiresIn como el literal StringValue
-            // de `ms`, no como un string genérico.
-            expiresIn: configService.get<string>(
-              'JWT_EXPIRES_IN',
-            ) as import('ms').StringValue,
-          },
+          signOptions: { expiresIn },
         };
       },
       inject: [ConfigService],

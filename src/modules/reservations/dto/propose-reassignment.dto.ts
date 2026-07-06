@@ -12,14 +12,14 @@ export class ProposeReassignmentDto {
   })
   proposedDate: string;
 
-  @ValidateIf((o) => o.proposedStartTime !== undefined)
+  @ValidateIf((o: ProposeReassignmentDto) => o.proposedStartTime !== undefined)
   @IsString()
   @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
     message: 'proposedStartTime debe tener formato HH:MM',
   })
   proposedStartTime?: string;
 
-  @ValidateIf((o) => o.proposedEndTime !== undefined)
+  @ValidateIf((o: ProposeReassignmentDto) => o.proposedEndTime !== undefined)
   @IsString()
   @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
     message: 'proposedEndTime debe tener formato HH:MM',

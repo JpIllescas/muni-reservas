@@ -26,6 +26,9 @@ export class Resource {
   @Column({ type: 'enum', enum: ResourceType })
   type: ResourceType;
 
+  // Ubicación INTERNA dentro de la sede (ej. "Cancha 2, nivel superior").
+  // Texto libre informativo: la dirección/lugar real del complejo vive en la
+  // entidad Sede (decisión: se conserva redefinida, no se elimina).
   @Column({ nullable: true })
   location: string;
 
