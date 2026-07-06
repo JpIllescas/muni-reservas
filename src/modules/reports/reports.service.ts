@@ -47,7 +47,7 @@ export class ReportsService {
       return [];
     }
 
-    const result = await query.getRawMany();
+    const result = await query.getRawMany<{ status: string; count: string }>();
 
     // Convertir el string 'count' que devuelve postgres a un numero real
     return result.map((item) => ({
@@ -72,7 +72,11 @@ export class ReportsService {
       return [];
     }
 
-    const result = await query.getRawMany();
+    const result = await query.getRawMany<{
+      resourceName: string;
+      resourceType: string;
+      reservationCount: string;
+    }>();
 
     return result.map((item) => ({
       resourceName: item.resourceName,

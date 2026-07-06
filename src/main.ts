@@ -35,4 +35,4 @@ async function bootstrap() {
   // 4. Escuchamos en el puerto que asigne AWS, o 3000 por defecto
   await app.listen(process.env.PORT || 3000);
 }
-bootstrap();
+void bootstrap();

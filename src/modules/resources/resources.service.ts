@@ -79,10 +79,12 @@ export class ResourcesService {
     return saved;
   }
 
-  // Obtener todos los recursos activos — para el catálogo ciudadano
+  // Obtener todos los recursos activos — para el catálogo ciudadano.
+  // Gate de sede: los recursos de una sede inactiva desaparecen del catálogo
+  // SIN tocar su isActive (al reactivar la sede vuelven solos, sin cascada).
   async findAll() {
     return this.resourceRepository.find({
-      where: { isActive: true },
+      where: { isActive: true, sede: { isActive: true } },
       order: { name: 'ASC' },
     });
   }
@@ -127,15 +129,18 @@ export class ResourcesService {
   async getAvailability(resourceId: string, date: string) {
     const resource = await this.resourceRepository.findOne({
       where: { id: resourceId, isActive: true },
+      relations: ['sede'],
     });
 
-    if (!resource) {
+    // Gate de sede: sede inactiva = recurso invisible (mismo mensaje que un
+    // recurso inactivo para no filtrar información).
+    if (!resource || !resource.sede.isActive) {
       throw new NotFoundException('Recurso no encontrado o inactivo.');
     }
 
     // ¿La fecha cae en una excepción (feriado / mantenimiento)?
     const exception = await this.exceptionRepository.findOne({
-      where: { resourceId, exceptionDate: date as any },
+      where: { resourceId, exceptionDate: date },
     });
 
     // Horario EFECTIVO del día: override por fecha (REC-3) > semanal. Si la fecha
@@ -371,7 +376,7 @@ export class ResourcesService {
 
     // Una sola excepción por recurso/fecha (no hay unique en BD: se valida acá).
     const existing = await this.exceptionRepository.findOne({
-      where: { resourceId, exceptionDate: dto.exceptionDate as any },
+      where: { resourceId, exceptionDate: dto.exceptionDate },
     });
     if (existing) {
       throw new BadRequestException('Esa fecha ya está bloqueada.');
@@ -394,7 +399,7 @@ export class ResourcesService {
 
     const exception = this.exceptionRepository.create({
       resourceId,
-      exceptionDate: dto.exceptionDate as any,
+      exceptionDate: dto.exceptionDate,
       reason: dto.reason,
       createdById: user.id,
     });

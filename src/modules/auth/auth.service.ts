@@ -69,10 +69,10 @@ export class AuthService {
 
     try {
       await this.userRepository.save(user);
-    } catch (e: any) {
+    } catch (e) {
       // Carrera: dos registros simultáneos del mismo correo/DPI. La unique
       // constraint de la BD lo corta (23505); mantenemos la respuesta neutra.
-      if (e?.code === '23505') {
+      if ((e as { code?: string } | null)?.code === '23505') {
         return neutralResponse;
       }
       throw e;

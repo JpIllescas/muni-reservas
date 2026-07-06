@@ -19,14 +19,14 @@ export class CreateReservationDto {
   reservationDate: string;
 
   // Solo requeridos si el recurso es de tipo COURT (cancha)
-  @ValidateIf((o) => o.startTime !== undefined)
+  @ValidateIf((o: CreateReservationDto) => o.startTime !== undefined)
   @IsString()
   @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
     message: 'startTime debe tener formato HH:MM',
   })
   startTime?: string;
 
-  @ValidateIf((o) => o.endTime !== undefined)
+  @ValidateIf((o: CreateReservationDto) => o.endTime !== undefined)
   @IsString()
   @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
     message: 'endTime debe tener formato HH:MM',

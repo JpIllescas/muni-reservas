@@ -9,6 +9,7 @@ import { Repository, In, Not, DataSource, EntityManager } from 'typeorm';
 import { Reservation } from './entities/reservation.entity';
 import { ReservationLog } from './entities/reservation-log.entity';
 import { Resource } from '../resources/entities/resource.entity';
+import { Sede } from '../resources/entities/sede.entity';
 import { Payment } from '../payments/entities/payment.entity';
 import { resolveEffectiveSchedule } from '../resources/utils/schedule-resolver.util';
 import { CreateReservationDto } from './dto/create-reservation.dto';
@@ -102,6 +103,16 @@ export class ReservationsService {
         );
       }
 
+      // Gate de sede: una sede inactiva oculta sus recursos y no acepta reservas
+      // NUEVAS, sin cascada sobre el isActive de los recursos (al reactivar la
+      // sede vuelven solos). Mismo mensaje que recurso inactivo (no filtra info).
+      const sede = await manager.findOne(Sede, {
+        where: { id: resource.sedeId },
+      });
+      if (!sede || !sede.isActive) {
+        throw new NotFoundException('Recurso no encontrado o inactivo.');
+      }
+
       const now = guatemalaNow();
 
       if (dto.reservationDate < now.date) {
@@ -130,7 +141,7 @@ export class ReservationsService {
       const exception = await manager.findOne(ResourceException, {
         where: {
           resourceId: dto.resourceId,
-          exceptionDate: dto.reservationDate as any,
+          exceptionDate: dto.reservationDate,
         },
       });
       if (exception) {
@@ -659,7 +670,7 @@ export class ReservationsService {
         const exception = await manager.findOne(ResourceException, {
           where: {
             resourceId: found.resourceId,
-            exceptionDate: found.reservationDate as any,
+            exceptionDate: found.reservationDate,
           },
         });
         if (exception) {
@@ -827,7 +838,7 @@ export class ReservationsService {
   ) {
     const reservation = await this.reservationRepository.findOne({
       where: { id },
-      relations: ['resource'],
+      relations: ['resource', 'user'],
     });
     if (!reservation) {
       throw new NotFoundException('Reserva no encontrada.');
@@ -893,6 +904,15 @@ export class ReservationsService {
       },
       ipAddress,
     );
+
+    // Aviso al ciudadano FUERA de la persistencia; silencioso si el SMTP falla
+    // (la propuesta ya quedó guardada y también se ve dentro del sistema).
+    if (reservation.user) {
+      await this.notificationsService.sendReassignmentProposalEmail(
+        reservation.user,
+        reservation,
+      );
+    }
 
     return reservation;
   }
@@ -1092,7 +1112,7 @@ export class ReservationsService {
   ): Promise<void> {
     // Fecha bloqueada por excepción (feriado / mantenimiento).
     const exception = await manager.findOne(ResourceException, {
-      where: { resourceId: resource.id, exceptionDate: date as any },
+      where: { resourceId: resource.id, exceptionDate: date },
     });
     if (exception) {
       throw new BadRequestException(
@@ -1252,7 +1272,7 @@ export class ReservationsService {
         .returning(['id'])
         .execute();
 
-      const expiredIds: string[] = result.raw.map((r: { id: string }) => r.id);
+      const expiredIds = (result.raw as { id: string }[]).map((r) => r.id);
 
       if (expiredIds.length === 0) {
         return 0;

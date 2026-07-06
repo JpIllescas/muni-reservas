@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
@@ -62,7 +66,29 @@ export class UsersService {
     if (dto.fullName !== undefined) user.fullName = dto.fullName;
     if (dto.phone !== undefined) user.phone = dto.phone;
 
-    return this.userRepository.save(user);
+    // DPI de una sola escritura: solo se acepta si aún está vacío. Ya fijado es
+    // inmutable (identidad), aunque manden el mismo valor.
+    if (dto.dpi !== undefined) {
+      if (user.dpi) {
+        throw new BadRequestException(
+          'El DPI ya está establecido y no se puede modificar.',
+        );
+      }
+      user.dpi = dto.dpi;
+    }
+
+    try {
+      return await this.userRepository.save(user);
+    } catch (err) {
+      // Unique de dpi: otro usuario ya lo registró (carrera incluida).
+      const pgCode =
+        (err as { code?: string }).code ??
+        (err as { driverError?: { code?: string } }).driverError?.code;
+      if (pgCode === '23505') {
+        throw new BadRequestException('Ese DPI ya está registrado.');
+      }
+      throw err;
+    }
   }
 
   // Admin cambia el rol de un usuario

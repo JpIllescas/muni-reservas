@@ -28,7 +28,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
-  async validate(payload: any) {
+  // Forma del payload que firma AuthService (sub = id del usuario).
+  async validate(payload: { sub: string }) {
     // Se cargan las sedes del actor (ADM-1) para acotar el alcance admin/operador.
     // Va contra la BD en cada request (no en el JWT), así la asignación de sedes
     // queda fresca aunque el token dure 7 días.
