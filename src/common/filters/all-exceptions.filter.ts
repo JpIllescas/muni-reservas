@@ -27,8 +27,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     // Código de error del driver de Postgres o de Multer, si el error lo trae.
     const code = (exception as { code?: string } | null)?.code;
 
-    // Interceptar errores únicos de base de datos (PostgreSQL 23505)
-    // Esto evita que mostremos columnas internas al usuario si el correo o DPI ya existen.
+    // Interceptar errores únicos de base de datos (PostgreSQL 23505). Esto evita que mostremos columnas internas al usuario si el correo o DPI ya existen.
     if (code === '23505') {
       status = HttpStatus.CONFLICT;
       message = {
@@ -47,7 +46,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       };
     }
 
-    // Exclusion violation (23P01): el backstop de la BD rechazó un solapamiento
+    // Exclusion violation (23P01): el backstop de la BD rechazó un solapamiento.
     if (code === '23P01') {
       status = HttpStatus.CONFLICT;
       message = {

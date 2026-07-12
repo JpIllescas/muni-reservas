@@ -7,9 +7,7 @@ export enum ReservationStatus {
   CANCELLED = 'cancelled',
 }
 
-// Estados "muertos": la reserva ya no ocupa el recurso. Se excluyen al buscar
-// solapamientos / duplicados (deben coincidir con los backstops de BD:
-// excl_court_overlap y uq_ranch_active_booking, que usan el set ACTIVO).
+// Estados "muertos": la reserva ya no ocupa el recurso.
 export const INACTIVE_RESERVATION_STATUSES: ReservationStatus[] = [
   ReservationStatus.CANCELLED,
   ReservationStatus.EXPIRED,
