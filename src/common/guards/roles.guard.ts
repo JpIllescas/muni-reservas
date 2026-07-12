@@ -5,7 +5,7 @@ import type { AuthUser } from '../interfaces/auth-user.interface';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(private reflector: Reflector) { }
 
   canActivate(context: ExecutionContext): boolean {
     const requiredRoles = this.reflector.getAllAndOverride<Role[]>('roles', [
@@ -19,9 +19,7 @@ export class RolesGuard implements CanActivate {
 
     const { user } = context.switchToHttp().getRequest<{ user?: AuthUser }>();
 
-    // Defensa: si por algún motivo no hay usuario en la request (p. ej. una ruta
-    // con @Roles a la que se le olvidó poner JwtAuthGuard), negamos en vez de
-    // reventar con un 500 al leer user.role.
+    // Defensa: si por algún motivo no hay usuario en la request.
     if (!user) {
       return false;
     }

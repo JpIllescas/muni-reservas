@@ -1,8 +1,7 @@
 import { ExecutionContext } from '@nestjs/common';
 import { SuperAdminGuard } from './super-admin.guard';
 
-// El harness e2e llama a los servicios directo (no pasa por guards), así que el
-// SuperAdminGuard se prueba unitariamente con un ExecutionContext simulado.
+// Simula un ExecutionContext con un usuario en la request.
 function contextWithUser(user: unknown): ExecutionContext {
   return {
     switchToHttp: () => ({ getRequest: () => ({ user }) }),
