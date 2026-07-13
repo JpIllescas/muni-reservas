@@ -13,7 +13,9 @@ import { ReservationStatus } from '../../src/common/enums/reservation-status.enu
 let seq = 0;
 
 // Usuario mínimo válido. La password es un hash ficticio (los tests no hacen
-// login; solo necesitamos la FK).
+// login; solo necesitamos la FK). CR-1: nace con DPI COMPLETO (número + fotos)
+// porque create() lo exige para reservar; un test que necesite un usuario sin
+// DPI lo anula por override (dpi/dpiFrontPath/dpiBackPath en null).
 export async function createUser(
   ds: DataSource,
   overrides: Partial<User> = {},
@@ -27,9 +29,26 @@ export async function createUser(
     isEmailVerified: true,
     isActive: true,
     role: Role.CITIZEN,
+    dpi: `${1000000000000 + seq}`, // único dentro de la corrida (unique en BD)
+    dpiFrontPath: `uploads/dpi/fixture-${seq}-front.png`,
+    dpiBackPath: `uploads/dpi/fixture-${seq}-back.png`,
     ...overrides,
   });
   return repo.save(user);
+}
+
+// Usuario SIN DPI (número ni fotos): para probar la regla USR-1 (fijar una
+// sola vez) y el gate de CR-1 en create().
+export async function createUserWithoutDpi(
+  ds: DataSource,
+  overrides: Partial<User> = {},
+): Promise<User> {
+  return createUser(ds, {
+    dpi: null as unknown as string,
+    dpiFrontPath: null,
+    dpiBackPath: null,
+    ...overrides,
+  });
 }
 
 // Construye el AuthUser que los controladores inyectarían (ADM-1): lo que el

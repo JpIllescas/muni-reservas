@@ -7,7 +7,7 @@ import { User } from '../src/modules/users/entities/user.entity';
 
 import { createTestModule } from './utils/test-module';
 import { cleanDatabase } from './utils/db-clean';
-import { createUser } from './utils/fixtures';
+import { createUser, createUserWithoutDpi } from './utils/fixtures';
 
 // USR-1 — Perfil editable, pero el DPI es de UNA sola escritura: se puede
 // ESTABLECER si el registro lo dejó vacío (FEL/CGC), y una vez fijado es
@@ -56,7 +56,7 @@ describe('updateProfile — USR-1 (e2e, BD real)', () => {
   });
 
   it('establece el DPI UNA vez si estaba vacío; después queda inmutable', async () => {
-    const user = await createUser(ds); // sin dpi
+    const user = await createUserWithoutDpi(ds); // sin dpi
 
     await service.updateProfile(user.id, { dpi: '1234567890101' } as any);
 
@@ -74,7 +74,7 @@ describe('updateProfile — USR-1 (e2e, BD real)', () => {
 
   it('rechaza un DPI que ya pertenece a otro usuario (unique)', async () => {
     await createUser(ds, { dpi: '1234567890101' });
-    const user = await createUser(ds); // sin dpi
+    const user = await createUserWithoutDpi(ds); // sin dpi
 
     await expect(
       service.updateProfile(user.id, { dpi: '1234567890101' } as any),

@@ -11,6 +11,7 @@ import { ReservationLog } from './entities/reservation-log.entity';
 import { Resource } from '../resources/entities/resource.entity';
 import { Sede } from '../resources/entities/sede.entity';
 import { Payment } from '../payments/entities/payment.entity';
+import { User } from '../users/entities/user.entity';
 import { resolveEffectiveSchedule } from '../resources/utils/schedule-resolver.util';
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationStatusDto } from './dto/update-reservation-status.dto';
@@ -89,6 +90,22 @@ export class ReservationsService {
 
     // Envolvemos TODO en una transacción ACID
     const saved = await this.dataSource.transaction(async (manager) => {
+      // CR-1: reservar exige identidad completa: número de DPI + las dos fotos
+      // (frente y reverso), registrados desde el perfil. Se chequea ANTES del
+      // lock del recurso para no serializar a quien igual va a ser rechazado.
+      const reservingUser = await manager.findOne(User, {
+        where: { id: userId },
+      });
+      if (
+        !reservingUser?.dpi ||
+        !reservingUser.dpiFrontPath ||
+        !reservingUser.dpiBackPath
+      ) {
+        throw new BadRequestException(
+          'Para reservar debes registrar tu DPI (número y fotos de ambos lados) en tu perfil.',
+        );
+      }
+
       // BLOQUEO PESIMISTA: Si dos personas intentan reservar ESTE recurso al mismo tiempo,
       // la base de datos hará que el segundo espere a que el primero termine.
       const resource = await manager.findOne(Resource, {

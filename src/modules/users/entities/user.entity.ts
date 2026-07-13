@@ -34,6 +34,15 @@ export class User {
   @Column({ nullable: true, unique: true })
   dpi: string;
 
+  // CR-1: fotos del DPI (frente y reverso), subidas desde el perfil. Rutas del
+  // filesystem (PII: /uploads está fuera de git). Junto con el número son
+  // requisito para reservar (gate en ReservationsService.create).
+  @Column({ name: 'dpi_front_path', type: 'varchar', nullable: true })
+  dpiFrontPath: string | null;
+
+  @Column({ name: 'dpi_back_path', type: 'varchar', nullable: true })
+  dpiBackPath: string | null;
+
   @Column({ nullable: true })
   phone: string;
 
