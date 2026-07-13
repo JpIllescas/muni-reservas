@@ -7,11 +7,15 @@ import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { Payment } from './entities/payment.entity';
 import { Reservation } from '../reservations/entities/reservation.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
     // ReservationLog se escribe vía el manager de la transacción (conexión global).
     TypeOrmModule.forFeature([Payment, Reservation]),
+
+    // CR-2: aviso a admins cuando una boleta deja la reserva en revisión.
+    NotificationsModule,
 
     // Configuracion de Multer para guardar las boletas en la carpeta definida en .env
     MulterModule.registerAsync({

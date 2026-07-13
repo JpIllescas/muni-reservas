@@ -12,6 +12,7 @@ export async function cleanDatabase(ds: DataSource): Promise<void> {
   try {
     await ds.query(`
       TRUNCATE TABLE
+        notifications,
         payments,
         reservation_logs,
         reservations,

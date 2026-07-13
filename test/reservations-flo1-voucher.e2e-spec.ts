@@ -17,7 +17,7 @@ import {
   dayOfWeekFromISODate,
 } from '../src/common/utils/date.utils';
 
-import { createTestModule } from './utils/test-module';
+import { createTestModule, notificationsMock } from './utils/test-module';
 import { cleanDatabase } from './utils/db-clean';
 import {
   createUser,
@@ -158,5 +158,14 @@ describe('FLO-1 — recurso sin comprobante (e2e, BD real)', () => {
     });
 
     expect(saved.paymentDeadline).toBeNull();
+
+    // CR-2: una reserva sin boleta nace "por autorizar" → dispara el aviso a
+    // los admins de la sede (la lógica interna se prueba en notifications-cr2).
+    expect(
+      notificationsMock.notifyReservationPendingReview,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({ id: saved.id }),
+      expect.objectContaining({ id: court.id }),
+    );
   });
 });
