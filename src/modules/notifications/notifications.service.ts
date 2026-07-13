@@ -105,6 +105,7 @@ export class NotificationsService {
           proposedTime: reservation.proposedStartTime
             ? `${this.formatTime(reservation.proposedStartTime)} - ${this.formatTime(reservation.proposedEndTime!)}`
             : null,
+          reason: reservation.proposedReason,
           year: new Date().getFullYear(),
         },
       });

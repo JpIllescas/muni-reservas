@@ -14,6 +14,7 @@ import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationStatusDto } from './dto/update-reservation-status.dto';
 import { ProposeReassignmentDto } from './dto/propose-reassignment.dto';
 import { ApplyDiscountDto } from './dto/apply-discount.dto';
+import { SetPriceDto } from './dto/set-price.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -81,6 +82,20 @@ export class ReservationsController {
     @Ip() ip: string,
   ) {
     return this.reservationsService.applyDiscount(id, dto, user, ip);
+  }
+
+  // PATCH /api/reservations/:id/price - CR-3: fijar el precio FINAL de una
+  // reserva puntual (carta/acuerdo). Solo admin; reason obligatoria; fijar el
+  // precio original quita el ajuste vigente. Solo antes de aprobar.
+  @Patch(':id/price')
+  @Roles(Role.ADMIN)
+  setPrice(
+    @Param('id') id: string,
+    @Body() dto: SetPriceDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.reservationsService.setPrice(id, dto, user, ip);
   }
 
   // PATCH /api/reservations/:id/revert-rejection - revertir un rechazo (RES-1).
