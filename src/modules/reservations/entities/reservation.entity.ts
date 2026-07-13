@@ -103,20 +103,17 @@ export class Reservation {
   @Column({ name: 'proposed_end_time', type: 'time', nullable: true })
   proposedEndTime: string | null;
 
-  // Admin/operador que emitió la propuesta. Columna plana (sin relación) para no
-  // arrastrar un FK que synchronize crearía solo en dev y divergiría de la
-  // migración a mano; igual criterio que contact_*.
+  // Admin/operador que emitió la propuesta. Columna plana (sin relación).
   @Column({ name: 'proposed_by', type: 'uuid', nullable: true })
   proposedBy: string | null;
 
   @Column({ name: 'proposed_at', type: 'timestamptz', nullable: true })
   proposedAt: Date | null;
+  // CR-6: motivo de la propuesta de reasignación (se le muestra al ciudadano la razon)
+  @Column({ name: 'proposed_reason', type: 'text', nullable: true })
+  proposedReason: string | null;
 
   // FLO-2: descuento por carta/oferta aplicado por un admin. `totalAmount`
-  // SIEMPRE queda como el monto FINAL a pagar (ARQ-1: el front solo muestra);
-  // estas columnas dejan constancia de cuánto se rebajó y por qué. El monto
-  // original se reconstruye como totalAmount + discountAmount. `discount_applied_by`
-  // es columna plana sin FK (mismo criterio que proposed_by/contact_*).
   @Column({
     name: 'discount_amount',
     type: 'decimal',

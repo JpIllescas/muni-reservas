@@ -8,13 +8,17 @@ import {
   UploadedFile,
   Body,
   StreamableFile,
+  Ip,
 } from '@nestjs/common';
 import { createReadStream } from 'fs';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PaymentsService } from './payments.service';
 import { UploadVoucherDto } from './dto/upload-voucher.dto';
+import { AdminUploadVoucherDto } from './dto/admin-upload-voucher.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from '../../common/enums/role.enum';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 
@@ -37,6 +41,28 @@ export class PaymentsController {
       user.id,
       file,
       dto,
+    );
+  }
+
+  // POST /api/payments/:reservationId/admin-voucher - CR-5: el admin/operador
+  // registra un pago en efectivo hecho en la cancha, subiendo la boleta en
+  // nombre del ciudadano. La reserva pasa a under_review, igual que el flujo normal.
+  @Post(':reservationId/admin-voucher')
+  @Roles(Role.ADMIN, Role.OPERATOR)
+  @UseInterceptors(FileInterceptor('voucher'))
+  uploadVoucherByAdmin(
+    @Param('reservationId') reservationId: string,
+    @CurrentUser() user: AuthUser,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() dto: AdminUploadVoucherDto,
+    @Ip() ip: string,
+  ) {
+    return this.paymentsService.uploadVoucherByAdmin(
+      reservationId,
+      user,
+      file,
+      dto,
+      ip,
     );
   }
 

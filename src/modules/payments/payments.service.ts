@@ -14,11 +14,13 @@ import { ReservationStatus } from '../../common/enums/reservation-status.enum';
 import { PaymentMethod } from '../../common/enums/payment-method.enum';
 import { Role } from '../../common/enums/role.enum';
 import { UploadVoucherDto } from './dto/upload-voucher.dto';
+import { AdminUploadVoucherDto } from './dto/admin-upload-voucher.dto';
 import { promises as fs } from 'fs';
 import { resolve, sep } from 'path';
 import { detectFileType } from '../../common/utils/file-signature.utils';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { assertSedeAccess } from '../../common/utils/sede-scope.util';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class PaymentsService {
@@ -30,6 +32,9 @@ export class PaymentsService {
     private readonly reservationRepository: Repository<Reservation>,
 
     private readonly dataSource: DataSource,
+
+    // AuditModule es @Global: se inyecta sin importar el módulo.
+    private readonly auditService: AuditService,
   ) {}
 
   async uploadVoucher(
@@ -105,6 +110,114 @@ export class PaymentsService {
       await fs.unlink(file.path).catch(() => undefined);
       throw error;
     }
+  }
+
+  // CR-5: el ciudadano pagó EN EFECTIVO en la cancha y el admin/operador sube
+  // la boleta en su nombre. Mismo flujo que uploadVoucher (magic bytes, tx,
+  // limpieza de huérfanos, pasa a under_review) pero con gating de sede (ADM-1),
+  // método cash, número de boleta obligatorio y auditoría de la acción admin.
+  // La aprobación sigue siendo updateStatus: la máquina de estados no cambia.
+  async uploadVoucherByAdmin(
+    reservationId: string,
+    actor: AuthUser,
+    file: Express.Multer.File,
+    dto: AdminUploadVoucherDto,
+    ipAddress?: string,
+  ) {
+    if (!file) {
+      throw new BadRequestException(
+        'La imagen o PDF de la boleta es requerido.',
+      );
+    }
+
+    const realType = await detectFileType(file.path);
+
+    if (!realType) {
+      await fs.unlink(file.path).catch(() => undefined);
+      throw new BadRequestException(
+        'El archivo no es una imagen (JPG/PNG) ni un PDF valido.',
+      );
+    }
+
+    let result: { message: string };
+    try {
+      result = await this.dataSource.transaction(async (manager) => {
+        // Con resource para el chequeo de sede; sin filtrar por userId (la
+        // reserva es del ciudadano, no del actor).
+        const reservation = await manager.findOne(Reservation, {
+          where: { id: reservationId },
+          relations: ['resource'],
+        });
+
+        if (!reservation) {
+          throw new NotFoundException('Reserva no encontrada.');
+        }
+
+        // Admin/operador solo registra pagos de recursos de sus sedes (ADM-1).
+        if (!actor.isSuperAdmin) {
+          assertSedeAccess(actor, reservation.resource.sedeId);
+        }
+
+        if (reservation.status !== ReservationStatus.PENDING_PAYMENT) {
+          throw new BadRequestException(
+            `No se puede registrar el pago. La reserva está en estado: ${reservation.status}`,
+          );
+        }
+
+        const payment = manager.create(Payment, {
+          reservationId: reservation.id,
+          method: PaymentMethod.CASH,
+          status: PaymentStatus.PENDING,
+          voucherPath: file.path,
+          voucherOriginalName: file.originalname,
+          voucherSizeBytes: file.size,
+          transactionReference: dto.transactionReference,
+          notes: dto.notes,
+          submittedAt: new Date(),
+        });
+
+        await manager.save(payment);
+
+        reservation.status = ReservationStatus.UNDER_REVIEW;
+        await manager.save(reservation);
+
+        const log = new ReservationLog();
+        log.reservationId = reservation.id;
+        log.fromStatus = ReservationStatus.PENDING_PAYMENT;
+        log.toStatus = ReservationStatus.UNDER_REVIEW;
+        log.changedById = actor.id;
+        log.reason = `Pago en efectivo registrado por administración (boleta N° ${dto.transactionReference}).`;
+
+        await manager.save(log);
+
+        return {
+          message:
+            'Pago en efectivo registrado. La reserva está bajo revisión.',
+        };
+      });
+    } catch (error) {
+      // La transacción hizo rollback en la BD, pero el archivo sigue en disco (se borra)
+      await fs.unlink(file.path).catch(() => undefined);
+      throw error;
+    }
+
+    // Auditoría de la acción administrativa, FUERA del try/catch: si fallara,
+    // el pago ya está commiteado y el archivo NO debe borrarse.
+    await this.auditService.createLog(
+      'Payment',
+      'ADMIN_UPLOAD_VOUCHER',
+      actor.id,
+      reservationId,
+      { status: ReservationStatus.PENDING_PAYMENT },
+      {
+        status: ReservationStatus.UNDER_REVIEW,
+        method: PaymentMethod.CASH,
+        transactionReference: dto.transactionReference,
+      },
+      ipAddress,
+    );
+
+    return result;
   }
 
   async getPaymentByReservation(reservationId: string, user: AuthUser) {

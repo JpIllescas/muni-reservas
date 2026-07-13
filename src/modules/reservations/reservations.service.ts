@@ -16,6 +16,7 @@ import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationStatusDto } from './dto/update-reservation-status.dto';
 import { ProposeReassignmentDto } from './dto/propose-reassignment.dto';
 import { ApplyDiscountDto } from './dto/apply-discount.dto';
+import { SetPriceDto } from './dto/set-price.dto';
 import {
   ReservationStatus,
   INACTIVE_RESERVATION_STATUSES,
@@ -23,6 +24,8 @@ import {
 } from '../../common/enums/reservation-status.enum';
 import { ResourceType } from '../../common/enums/resource-type.enum';
 import { ResourceStatus } from '../../common/enums/resource-status.enum';
+import { PaymentMethod } from '../../common/enums/payment-method.enum';
+import { PaymentStatus } from '../../common/enums/payment-status.enum';
 import { Role } from '../../common/enums/role.enum';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -458,6 +461,29 @@ export class ReservationsService {
           }
         }
 
+        // 2b. CR-7: aprobar un recurso SIN comprobante exige el número de la
+        // boleta física (pagan en efectivo al llegar) y deja un Payment cash
+        // aprobado en la misma transacción: constancia fiscalizable en vez de
+        // la aprobación "al aire" que permitía FLO-1.
+        if (approveWithoutVoucher) {
+          if (!dto.receiptNumber) {
+            throw new BadRequestException(
+              'Para aprobar esta reserva debes indicar el número de boleta.',
+            );
+          }
+          const now = new Date();
+          const payment = manager.create(Payment, {
+            reservationId: id,
+            method: PaymentMethod.CASH,
+            status: PaymentStatus.APPROVED,
+            transactionReference: dto.receiptNumber,
+            submittedAt: now,
+            reviewedAt: now,
+            reviewedById: user.id,
+          });
+          await manager.save(payment);
+        }
+
         // 3. Aplicar el cambio.
         found.status = dto.status;
         if (dto.status === ReservationStatus.APPROVED) {
@@ -599,6 +625,102 @@ export class ReservationsService {
     await this.auditService.createLog(
       'Reservation',
       dto.amount === 0 ? 'REMOVE_DISCOUNT' : 'APPLY_DISCOUNT',
+      user.id,
+      id,
+      oldValues,
+      {
+        totalAmount: reservation.totalAmount,
+        discountAmount: reservation.discountAmount,
+        discountReason: reservation.discountReason,
+      },
+      ipAddress,
+    );
+
+    return reservation;
+  }
+
+  // CR-3: el admin fija el PRECIO FINAL de una reserva puntual (carta/acuerdo
+  // que no encaja como descuento simple, o un ajuste hacia arriba). Se apoya en
+  // las MISMAS columnas de FLO-2: discountAmount = original − nuevo precio
+  // (negativo si el precio sube), así el monto original nunca se pierde y las
+  // dos vías (descuento y precio) son consistentes entre sí. totalAmount sigue
+  // siendo SIEMPRE el monto final a pagar (ARQ-1). Misma ventana y candado que
+  // applyDiscount: solo mientras el pago no está resuelto.
+  async setPrice(
+    id: string,
+    dto: SetPriceDto,
+    user: AuthUser,
+    ipAddress?: string,
+  ) {
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
+    const { reservation, oldValues } = await this.dataSource.transaction(
+      async (manager) => {
+        // Candado pesimista: serializa contra updateStatus/applyDiscount.
+        const found = await manager.findOne(Reservation, {
+          where: { id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!found) {
+          throw new NotFoundException('Reserva no encontrada.');
+        }
+
+        // ADM-1: solo reservas de recursos de las sedes del actor.
+        const resource = await manager.findOne(Resource, {
+          where: { id: found.resourceId },
+        });
+        if (!user.isSuperAdmin) {
+          assertSedeAccess(user, resource!.sedeId);
+        }
+
+        if (!this.discountableStatuses.includes(found.status)) {
+          throw new BadRequestException(
+            'Solo se puede editar el precio mientras la reserva está pendiente de pago o en revisión.',
+          );
+        }
+
+        // Monto original (sin ajuste vigente): el precio nuevo se fija SIEMPRE
+        // respecto al original, no sobre un ajuste previo.
+        const original = round2(
+          found.totalAmount + (found.discountAmount ?? 0),
+        );
+        const oldValues = {
+          totalAmount: found.totalAmount,
+          discountAmount: found.discountAmount,
+          discountReason: found.discountReason,
+        };
+
+        const adjustment = round2(original - dto.newTotal);
+
+        if (adjustment === 0) {
+          if (found.discountAmount === null) {
+            throw new BadRequestException(
+              'La reserva ya tiene ese precio; no hay nada que cambiar.',
+            );
+          }
+          // Fijar el precio original = quitar el ajuste vigente.
+          found.discountAmount = null;
+          found.discountReason = null;
+          found.discountAppliedBy = null;
+          found.discountAppliedAt = null;
+          found.totalAmount = original;
+        } else {
+          found.discountAmount = adjustment;
+          found.discountReason = dto.reason;
+          found.discountAppliedBy = user.id;
+          found.discountAppliedAt = new Date();
+          found.totalAmount = round2(dto.newTotal);
+        }
+
+        await manager.save(found);
+        return { reservation: found, oldValues };
+      },
+    );
+
+    // Auditoría fuera de la transacción (mismo criterio que applyDiscount).
+    await this.auditService.createLog(
+      'Reservation',
+      'SET_PRICE',
       user.id,
       id,
       oldValues,
@@ -885,6 +1007,7 @@ export class ReservationsService {
     reservation.proposedEndTime = proposedEnd;
     reservation.proposedBy = user.id;
     reservation.proposedAt = new Date();
+    reservation.proposedReason = dto.reason;
     await this.reservationRepository.save(reservation);
 
     await this.auditService.createLog(
@@ -901,6 +1024,7 @@ export class ReservationsService {
         date: dto.proposedDate,
         startTime: proposedStart,
         endTime: proposedEnd,
+        reason: dto.reason,
       },
       ipAddress,
     );
@@ -1028,6 +1152,7 @@ export class ReservationsService {
         found.proposedEndTime = null;
         found.proposedBy = null;
         found.proposedAt = null;
+        found.proposedReason = null;
 
         await manager.save(found); // dispara el backstop si el slot ya se ocupó
 
@@ -1083,6 +1208,7 @@ export class ReservationsService {
     reservation.proposedEndTime = null;
     reservation.proposedBy = null;
     reservation.proposedAt = null;
+    reservation.proposedReason = null;
     await this.reservationRepository.save(reservation);
 
     await this.auditService.createLog(

@@ -1,9 +1,12 @@
-import { IsNotEmpty, IsString, Matches, ValidateIf } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  Matches,
+  MaxLength,
+  ValidateIf,
+} from 'class-validator';
 
-// RES-3: el admin/operador propone un nuevo slot para una reserva (misma
-// cancha/rancho). Mismos formatos que CreateReservationDto. startTime/endTime
-// son opcionales aquí: se exigen recién en el servicio y solo para canchas
-// (los ranchos son de día completo → van null).
+// RES-3: el admin/operador propone un nuevo slot para una reserva
 export class ProposeReassignmentDto {
   @IsNotEmpty()
   @IsString()
@@ -25,4 +28,10 @@ export class ProposeReassignmentDto {
     message: 'proposedEndTime debe tener formato HH:MM',
   })
   proposedEndTime?: string;
+
+  // CR-6: motivo del cambio; obligatorio, se muestra al ciudadano y va en el email.
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(300)
+  reason: string;
 }
