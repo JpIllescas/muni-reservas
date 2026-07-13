@@ -21,6 +21,7 @@ import { detectFileType } from '../../common/utils/file-signature.utils';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { assertSedeAccess } from '../../common/utils/sede-scope.util';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class PaymentsService {
@@ -35,6 +36,9 @@ export class PaymentsService {
 
     // AuditModule es @Global: se inyecta sin importar el módulo.
     private readonly auditService: AuditService,
+
+    // CR-2: aviso a los admins cuando una reserva entra a revisión.
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async uploadVoucher(
@@ -58,11 +62,17 @@ export class PaymentsService {
       );
     }
 
+    // CR-2: referencia para el aviso a admins post-commit.
+    let notifyReservation: Reservation | null = null;
+
     // --- Try/catch envolviendo la transacción ---
+    let result: { message: string };
     try {
-      return await this.dataSource.transaction(async (manager) => {
+      result = await this.dataSource.transaction(async (manager) => {
+        // Con resource: para el aviso a los admins de la sede (CR-2).
         const reservation = await manager.findOne(Reservation, {
           where: { id: reservationId, userId },
+          relations: ['resource'],
         });
 
         if (!reservation) {
@@ -101,6 +111,7 @@ export class PaymentsService {
 
         await manager.save(log);
 
+        notifyReservation = reservation;
         return {
           message: 'Boleta subida exitosamente. La reserva está bajo revisión.',
         };
@@ -110,6 +121,17 @@ export class PaymentsService {
       await fs.unlink(file.path).catch(() => undefined);
       throw error;
     }
+
+    // CR-2: la reserva entró a revisión → aviso a los admins de la sede.
+    // FUERA de la transacción y best-effort (no toca el pago ya commiteado).
+    if (notifyReservation) {
+      await this.notificationsService.notifyReservationPendingReview(
+        notifyReservation,
+        (notifyReservation as Reservation).resource,
+      );
+    }
+
+    return result;
   }
 
   // CR-5: el ciudadano pagó EN EFECTIVO en la cancha y el admin/operador sube
@@ -138,6 +160,9 @@ export class PaymentsService {
         'El archivo no es una imagen (JPG/PNG) ni un PDF valido.',
       );
     }
+
+    // CR-2: referencia para el aviso a admins post-commit.
+    let notifyReservation: Reservation | null = null;
 
     let result: { message: string };
     try {
@@ -190,6 +215,7 @@ export class PaymentsService {
 
         await manager.save(log);
 
+        notifyReservation = reservation;
         return {
           message:
             'Pago en efectivo registrado. La reserva está bajo revisión.',
@@ -216,6 +242,16 @@ export class PaymentsService {
       },
       ipAddress,
     );
+
+    // CR-2: la reserva entró a revisión → aviso a los admins de la sede,
+    // excluyendo al actor (él mismo registró el pago). Best-effort.
+    if (notifyReservation) {
+      await this.notificationsService.notifyReservationPendingReview(
+        notifyReservation,
+        (notifyReservation as Reservation).resource,
+        actor.id,
+      );
+    }
 
     return result;
   }

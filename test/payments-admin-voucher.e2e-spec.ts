@@ -15,7 +15,7 @@ import { PaymentMethod } from '../src/common/enums/payment-method.enum';
 import { PaymentStatus } from '../src/common/enums/payment-status.enum';
 import { Role } from '../src/common/enums/role.enum';
 
-import { createTestModule } from './utils/test-module';
+import { createTestModule, notificationsMock } from './utils/test-module';
 import { cleanDatabase } from './utils/db-clean';
 import {
   createUser,
@@ -129,6 +129,16 @@ describe('CR-5 — boleta cargada por admin, pago en efectivo (e2e, BD real)', (
 
     // El archivo sigue en disco (es la boleta guardada).
     expect(await fileExists(file.path)).toBe(true);
+
+    // CR-2: la reserva entró a revisión → aviso a los admins de la sede,
+    // excluyendo al actor (él registró el pago).
+    expect(
+      notificationsMock.notifyReservationPendingReview,
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({ id: r.id }),
+      expect.objectContaining({ id: court.id }),
+      admin.id,
+    );
   });
 
   it('sede ajena → Forbidden, nada cambia y el archivo se borra (ADM-1)', async () => {

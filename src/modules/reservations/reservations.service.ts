@@ -83,8 +83,12 @@ export class ReservationsService {
   ) {}
 
   async create(userId: string, dto: CreateReservationDto) {
+    // CR-2: referencia al recurso para el aviso post-commit (se asigna dentro
+    // de la transacción, se usa después de que TODO quedó persistido).
+    let notifyResource: Resource | null = null;
+
     // Envolvemos TODO en una transacción ACID
-    return this.dataSource.transaction(async (manager) => {
+    const saved = await this.dataSource.transaction(async (manager) => {
       // BLOQUEO PESIMISTA: Si dos personas intentan reservar ESTE recurso al mismo tiempo,
       // la base de datos hará que el segundo espere a que el primero termine.
       const resource = await manager.findOne(Resource, {
@@ -305,8 +309,22 @@ export class ReservationsService {
 
       await manager.save(log); // Si esto falla, NADA se guarda gracias a la transacción.
 
+      notifyResource = resource;
       return saved;
     });
+
+    // CR-2: un recurso de confirmación por llamada (FLO-1) nace "por autorizar"
+    // (no hay boleta que esperar) → aviso a los admins de la sede. Las canchas
+    // con boleta avisan recién cuando se sube la boleta (uploadVoucher). FUERA
+    // de la transacción y best-effort: un fallo aquí no toca la reserva.
+    if (notifyResource && !(notifyResource as Resource).requiresVoucher) {
+      await this.notificationsService.notifyReservationPendingReview(
+        saved,
+        notifyResource,
+      );
+    }
+
+    return saved;
   }
 
   // El ciudadano ve sus propias reservas
