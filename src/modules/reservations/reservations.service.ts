@@ -49,12 +49,19 @@ export class ReservationsService {
       ReservationStatus.REJECTED,
     ],
     [ReservationStatus.PENDING_PAYMENT]: [ReservationStatus.REJECTED],
+    // CR-4: primera confirmación de la administración. Aceptar → pending_payment
+    // (ahí arranca la ventana de pago); anular → rejected.
+    [ReservationStatus.PENDING_CONFIRMATION]: [
+      ReservationStatus.PENDING_PAYMENT,
+      ReservationStatus.REJECTED,
+    ],
   };
 
   // RES-3: estados desde los que se puede PROPONER/ACEPTAR una reasignación.
   // Activos (se mueven conservando estado) + rejected (revive al nuevo slot,
   // fallback del breadcrumb de RES-1). Se excluyen expired y cancelled.
   private readonly reassignableStatuses: ReservationStatus[] = [
+    ReservationStatus.PENDING_CONFIRMATION,
     ReservationStatus.PENDING_PAYMENT,
     ReservationStatus.UNDER_REVIEW,
     ReservationStatus.APPROVED,
@@ -65,6 +72,9 @@ export class ReservationsService {
   // no está resuelto. Tras aprobar (o rechazar/expirar/cancelar) el monto queda
   // congelado tal como se revisó.
   private readonly discountableStatuses: ReservationStatus[] = [
+    // CR-4: también antes de aceptar (el admin revisa el DPI y ajusta la
+    // tarifa de no-vecino ANTES de dar la primera confirmación).
+    ReservationStatus.PENDING_CONFIRMATION,
     ReservationStatus.PENDING_PAYMENT,
     ReservationStatus.UNDER_REVIEW,
   ];
@@ -277,16 +287,16 @@ export class ReservationsService {
         }
       }
 
-      let paymentDeadline: Date | null = null;
-      // Solo hay ventana de pago (y auto-expiración) si el recurso exige boleta
-      // (FLO-1) y cobra por hora (cancha). Confirmación por llamada → sin deadline.
-      if (resource.type === ResourceType.COURT && resource.requiresVoucher) {
-        // POL-1: la ventana de pago es configurable por recurso (antes 24h fijas).
-        paymentDeadline = new Date();
-        paymentDeadline.setHours(
-          paymentDeadline.getHours() + resource.paymentWindowHours,
-        );
-      }
+      // CR-4: una cancha con boleta nace "pendiente de aceptar" — el admin da
+      // la PRIMERA confirmación. La ventana de pago NO corre aquí: arranca
+      // cuando el admin acepta (updateStatus pone el deadline al pasar a
+      // pending_payment). Ranchos y recursos sin boleta nacen pending_payment
+      // sin deadline, igual que antes (FLO-1: pagan al llegar / por llamada).
+      const needsPreConfirmation =
+        resource.type === ResourceType.COURT && resource.requiresVoucher;
+      const initialStatus = needsPreConfirmation
+        ? ReservationStatus.PENDING_CONFIRMATION
+        : ReservationStatus.PENDING_PAYMENT;
 
       const startTime =
         resource.type === ResourceType.COURT ? (dto.startTime ?? null) : null;
@@ -308,8 +318,8 @@ export class ReservationsService {
         reservationDate: dto.reservationDate,
         startTime,
         endTime,
-        status: ReservationStatus.PENDING_PAYMENT,
-        paymentDeadline,
+        status: initialStatus,
+        paymentDeadline: null,
         totalAmount,
         contactName: dto.contactName,
         contactPhone: dto.contactPhone,
@@ -320,7 +330,7 @@ export class ReservationsService {
       const log = new ReservationLog();
       log.reservationId = saved.id;
       log.fromStatus = null;
-      log.toStatus = ReservationStatus.PENDING_PAYMENT;
+      log.toStatus = initialStatus;
       log.changedById = userId;
       log.reason = 'Reserva creada';
 
@@ -330,11 +340,16 @@ export class ReservationsService {
       return saved;
     });
 
-    // CR-2: un recurso de confirmación por llamada (FLO-1) nace "por autorizar"
-    // (no hay boleta que esperar) → aviso a los admins de la sede. Las canchas
-    // con boleta avisan recién cuando se sube la boleta (uploadVoucher). FUERA
-    // de la transacción y best-effort: un fallo aquí no toca la reserva.
-    if (notifyResource && !(notifyResource as Resource).requiresVoucher) {
+    // CR-2/CR-4: aviso a los admins de la sede cuando la reserva nace
+    // necesitando acción de la administración: sin boleta (FLO-1, por llamada)
+    // o pendiente de la primera confirmación (CR-4). Un rancho con boleta nace
+    // esperando al CIUDADANO → avisa recién en uploadVoucher. FUERA de la
+    // transacción y best-effort: un fallo aquí no toca la reserva.
+    if (
+      notifyResource &&
+      (!(notifyResource as Resource).requiresVoucher ||
+        saved.status === ReservationStatus.PENDING_CONFIRMATION)
+    ) {
       await this.notificationsService.notifyReservationPendingReview(
         saved,
         notifyResource,
@@ -526,6 +541,17 @@ export class ReservationsService {
         }
         if (dto.status === ReservationStatus.REJECTED) {
           found.rejectionReason = dto.reason;
+        }
+        // CR-4: primera confirmación (aceptar). La ventana de pago arranca
+        // AQUÍ, no al crear: así el plazo no se quema esperando al admin.
+        if (
+          fromStatus === ReservationStatus.PENDING_CONFIRMATION &&
+          dto.status === ReservationStatus.PENDING_PAYMENT &&
+          resource!.requiresVoucher
+        ) {
+          const deadline = new Date();
+          deadline.setHours(deadline.getHours() + resource!.paymentWindowHours);
+          found.paymentDeadline = deadline;
         }
         await manager.save(found);
 

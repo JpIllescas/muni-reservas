@@ -21,6 +21,7 @@ import { AuditLog } from './modules/audit/entities/audit-log.entity';
 import { SystemConfig } from './modules/config/entities/system-config.entity';
 import { ResourceException } from './modules/resources/entities/resource-exception.entity';
 import { ResourceScheduleOverride } from './modules/resources/entities/resource-schedule-override.entity';
+import { Notification } from './modules/notifications/entities/notification.entity';
 
 //Modulos
 import { AuthModule } from './modules/auth/auth.module';
@@ -78,8 +79,14 @@ import { SedesModule } from './modules/sedes/sedes.module';
             Payment,
             AuditLog,
             SystemConfig,
+            Notification,
           ],
-          synchronize: !isProd,
+          // SIEMPRE false, también en dev: se comprobó (2026-07-13) que
+          // synchronize BORRA los backstops anti-doble-reserva en cada boot
+          // (excl_court_overlap / uq_ranch_active_booking: objetos que TypeORM
+          // no modela y dropea como "desconocidos"). El esquema se maneja SOLO
+          // con migraciones, en todos los entornos.
+          synchronize: false,
           logging: isProd ? ['error', 'warn'] : true,
         };
       },
