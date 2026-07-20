@@ -58,6 +58,7 @@ const RESOURCES: Partial<Resource>[] = [
     rules:
       'Máximo 1 reserva por día por usuario. Presentarse 10 minutos antes.',
     advanceDays: 7,
+    paymentWindowHours: 2, // POL-1: ventana de pago de 2h para canchas
     isActive: true,
   },
   {
@@ -144,11 +145,33 @@ async function seedSchedules(): Promise<void> {
   }
 }
 
+// Contraseñas de dev que jamás deben terminar creando un super-admin en prod.
+const WEAK_SEED_PASSWORDS = ['Admin1234', 'admin', 'password', '12345678'];
+
 async function seedAdmin(): Promise<void> {
   const repo = AppDataSource.getRepository(User);
-  const email = process.env.SEED_ADMIN_EMAIL ?? 'admin@muni.local';
-  const password = process.env.SEED_ADMIN_PASSWORD ?? 'Admin1234';
-  const fullName = process.env.SEED_ADMIN_NAME ?? 'Administrador Dev';
+  const isProd = process.env.NODE_ENV === 'production';
+
+  // En prod las credenciales son obligatorias por entorno: sin defaults ni logging
+  // de la contraseña. En dev se usan valores cómodos por defecto.
+  const email =
+    process.env.SEED_ADMIN_EMAIL ?? (isProd ? '' : 'admin@muni.local');
+  const password =
+    process.env.SEED_ADMIN_PASSWORD ?? (isProd ? '' : 'Admin1234');
+  const fullName = process.env.SEED_ADMIN_NAME ?? 'Administrador';
+
+  if (isProd) {
+    if (!email || !password) {
+      throw new Error(
+        'En producción SEED_ADMIN_EMAIL y SEED_ADMIN_PASSWORD son obligatorios.',
+      );
+    }
+    if (password.length < 12 || WEAK_SEED_PASSWORDS.includes(password)) {
+      throw new Error(
+        'SEED_ADMIN_PASSWORD es demasiado débil para producción (mínimo 12 caracteres, sin contraseñas conocidas).',
+      );
+    }
+  }
 
   const exists = await repo.findOne({ where: { email } });
   if (exists) {
@@ -156,7 +179,6 @@ async function seedAdmin(): Promise<void> {
     return;
   }
 
-  // Mismo costo de bcrypt que el registro real (12 rounds).
   const hash = await bcrypt.hash(password, 12);
   await repo.save(
     repo.create({
@@ -164,12 +186,13 @@ async function seedAdmin(): Promise<void> {
       email,
       password: hash,
       role: Role.ADMIN,
-      isSuperAdmin: true, // dev admin = super-admin: ve todas las sedes y puede crear/asignar
-      isEmailVerified: true, // ya verificado: entra sin OTP de registro
+      isSuperAdmin: true,
+      isEmailVerified: true,
       isActive: true,
     }),
   );
-  console.log(`  ✓ Admin creado: ${email}  (password: ${password})`);
+  // Nunca se loguea la contraseña (en prod viene de un secreto de entorno).
+  console.log(`  ✓ Admin creado: ${email}`);
 }
 
 async function run(): Promise<void> {

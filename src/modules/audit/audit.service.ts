@@ -46,13 +46,59 @@ export class AuditService {
     }
   }
 
-  // Metodo para que el administrador vea todo el historial de cambios
-  async findAll(limit: number = 50, offset: number = 0) {
-    return this.auditRepository.find({
-      relations: ['performedBy'],
-      order: { createdAt: 'DESC' },
-      take: limit,
-      skip: offset,
-    });
+  // Listado de la bitácora para el administrador, con filtros combinables
+  // (entidad, acción, actor, rango de fechas) y paginado {data, meta}.
+  async findAll(filters: {
+    page: number;
+    limit: number;
+    entityType?: string;
+    action?: string;
+    user?: string;
+    from?: string;
+    to?: string;
+  }) {
+    const query = this.auditRepository
+      .createQueryBuilder('a')
+      .leftJoinAndSelect('a.performedBy', 'u')
+      .orderBy('a.createdAt', 'DESC');
+
+    if (filters.entityType) {
+      query.andWhere('a.entityType = :entityType', {
+        entityType: filters.entityType,
+      });
+    }
+    if (filters.action) {
+      query.andWhere('a.action ILIKE :action', {
+        action: `%${filters.action}%`,
+      });
+    }
+    if (filters.user) {
+      query.andWhere('(u.fullName ILIKE :actor OR u.email ILIKE :actor)', {
+        actor: `%${filters.user}%`,
+      });
+    }
+    // Rango por fecha (inclusive): [from 00:00, to+1día).
+    if (filters.from) {
+      query.andWhere('a.createdAt >= :from', { from: filters.from });
+    }
+    if (filters.to) {
+      query.andWhere("a.createdAt < :to::date + interval '1 day'", {
+        to: filters.to,
+      });
+    }
+
+    const skip = (filters.page - 1) * filters.limit;
+    query.skip(skip).take(filters.limit);
+
+    const [data, total] = await query.getManyAndCount();
+    return {
+      data,
+      meta: {
+        total,
+        page: filters.page,
+        limit: filters.limit,
+        totalPages: Math.ceil(total / filters.limit),
+      },
+    };
   }
 }

@@ -49,6 +49,26 @@ export class UsersService {
     });
   }
 
+  // Búsqueda para "crear reserva a nombre de" (B4): admin U operador. Devuelve
+  // solo lo necesario para identificar al ciudadano (sin rutas de archivos).
+  async search(query: string) {
+    const q = query.trim();
+    if (q.length < 2) {
+      return [];
+    }
+    return this.userRepository
+      .createQueryBuilder('u')
+      .select(['u.id', 'u.fullName', 'u.email', 'u.dpi', 'u.phone'])
+      .where('u.isActive = true')
+      .andWhere(
+        '(u.fullName ILIKE :like OR u.email ILIKE :like OR u.dpi LIKE :dpiLike)',
+        { like: `%${q}%`, dpiLike: `%${q}%` },
+      )
+      .orderBy('u.fullName', 'ASC')
+      .take(10)
+      .getMany();
+  }
+
   // Obtener un usuario por id
   async findOne(id: string) {
     const user = await this.userRepository.findOne({
@@ -62,6 +82,7 @@ export class UsersService {
         'dpiBackPath',
         'phone',
         'role',
+        'isSuperAdmin',
         'isActive',
         'createdAt',
       ],
@@ -221,10 +242,13 @@ export class UsersService {
 
   // Devuelve la ruta física + content-type de una foto del DPI, ya autorizada:
   // el dueño ve la suya; admin/operador cualquiera (verificación de vecindad).
+  // El acceso AJENO queda en la bitácora (VIEW_DPI): es un documento de
+  // identidad y la consulta misma debe ser fiscalizable.
   async getDpiFile(
     targetUserId: string,
     side: 'front' | 'back',
     requester: AuthUser,
+    ipAddress?: string,
   ) {
     if (side !== 'front' && side !== 'back') {
       throw new BadRequestException('Lado inválido: usa "front" o "back".');
@@ -271,6 +295,20 @@ export class UsersService {
         : realType === 'jpg'
           ? 'image/jpeg'
           : 'application/octet-stream';
+
+    // Bitácora de LECTURA sensible: solo cuando alguien consulta un DPI ajeno
+    // (el dueño viendo el suyo no es fiscalizable). Best-effort como el resto.
+    if (requester.id !== targetUserId) {
+      await this.auditService.createLog(
+        'User',
+        'VIEW_DPI',
+        requester.id,
+        targetUserId,
+        undefined,
+        { side },
+        ipAddress,
+      );
+    }
 
     return { path: absPath, contentType, fileName: `dpi-${side}` };
   }

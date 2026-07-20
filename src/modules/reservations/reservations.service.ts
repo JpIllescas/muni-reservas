@@ -16,7 +16,6 @@ import { resolveEffectiveSchedule } from '../resources/utils/schedule-resolver.u
 import { CreateReservationDto } from './dto/create-reservation.dto';
 import { UpdateReservationStatusDto } from './dto/update-reservation-status.dto';
 import { ProposeReassignmentDto } from './dto/propose-reassignment.dto';
-import { ApplyDiscountDto } from './dto/apply-discount.dto';
 import { SetPriceDto } from './dto/set-price.dto';
 import {
   ReservationStatus,
@@ -93,7 +92,15 @@ export class ReservationsService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async create(userId: string, dto: CreateReservationDto) {
+  // ADM-2 (B4): `actor` presente ⇒ la reserva la crea un admin/operador a nombre
+  // de un ciudadano existente (`userId` es el ciudadano, no el actor). Se valida
+  // la sede del actor y se audita. Sin `actor` es el flujo normal del ciudadano.
+  async create(
+    userId: string,
+    dto: CreateReservationDto,
+    actor?: AuthUser,
+    ipAddress?: string,
+  ) {
     // CR-2: referencia al recurso para el aviso post-commit (se asigna dentro
     // de la transacción, se usa después de que TODO quedó persistido).
     let notifyResource: Resource | null = null;
@@ -106,13 +113,18 @@ export class ReservationsService {
       const reservingUser = await manager.findOne(User, {
         where: { id: userId },
       });
+      if (!reservingUser) {
+        throw new NotFoundException('Usuario no encontrado.');
+      }
       if (
-        !reservingUser?.dpi ||
+        !reservingUser.dpi ||
         !reservingUser.dpiFrontPath ||
         !reservingUser.dpiBackPath
       ) {
         throw new BadRequestException(
-          'Para reservar debes registrar tu DPI (número y fotos de ambos lados) en tu perfil.',
+          actor
+            ? 'El ciudadano debe tener su DPI (número y fotos) registrado para reservar a su nombre.'
+            : 'Para reservar debes registrar tu DPI (número y fotos de ambos lados) en tu perfil.',
         );
       }
 
@@ -125,6 +137,11 @@ export class ReservationsService {
 
       if (!resource) {
         throw new NotFoundException('Recurso no encontrado o inactivo.');
+      }
+
+      // ADM-2 (B4): el admin/operador solo crea en recursos de sus sedes.
+      if (actor && !actor.isSuperAdmin) {
+        assertSedeAccess(actor, resource.sedeId);
       }
 
       // REC-2: el recurso puede estar activo pero en mantenimiento/evento. El
@@ -353,19 +370,43 @@ export class ReservationsService {
       await this.notificationsService.notifyReservationPendingReview(
         saved,
         notifyResource,
+        actor?.id, // B4: si la creó un admin, no auto-notificarlo
+      );
+    }
+
+    // ADM-2 (B4): rastro de la reserva creada por la administración a nombre de
+    // un ciudadano. El create normal del ciudadano no se audita (es su propia acción).
+    if (actor) {
+      await this.auditService.createLog(
+        'Reservation',
+        'ADMIN_CREATE',
+        actor.id,
+        saved.id,
+        undefined,
+        {
+          userId,
+          resourceId: dto.resourceId,
+          reservationDate: dto.reservationDate,
+        },
+        ipAddress,
       );
     }
 
     return saved;
   }
 
-  // El ciudadano ve sus propias reservas
+  // El ciudadano ve sus propias reservas. voucherCount indica si tiene boleta
+  // adjunta (para el botón "Ver boleta" del frontend).
   async findMyReservations(userId: string) {
-    return this.reservationRepository.find({
-      where: { userId },
-      relations: ['resource'],
-      order: { createdAt: 'DESC' },
-    });
+    return this.reservationRepository
+      .createQueryBuilder('r')
+      .leftJoinAndSelect('r.resource', 'resource')
+      .loadRelationCountAndMap('r.voucherCount', 'r.payments', 'p', (qb) =>
+        qb.where('p.voucherPath IS NOT NULL'),
+      )
+      .where('r.userId = :userId', { userId })
+      .orderBy('r.createdAt', 'DESC')
+      .getMany();
   }
 
   // Admin y operador ven las reservas de SUS sedes (ADM-1). El super-admin ve todas.
@@ -481,12 +522,19 @@ export class ReservationsService {
 
         const fromStatus = found.status;
 
+        // Reserva EXONERADA (totalAmount = 0, ej. colegio/municipalidad vía
+        // "editar precio" con motivo): no hay pago que exigir ni boleta que
+        // registrar; se aprueba directo y el rastro queda en el ajuste de
+        // precio (discountReason) + logs.
+        const exonerated = found.totalAmount === 0;
+
         // 1. Validar la transición contra la máquina de estados.
         //    FLO-1: un recurso de confirmación por llamada (requiresVoucher=false)
         //    puede aprobarse directo desde pending_payment, sin pasar por revisión.
+        //    Una exonerada también (no va a llegar ninguna boleta).
         const allowed = this.allowedTransitions[fromStatus] ?? [];
         const approveWithoutVoucher =
-          !resource!.requiresVoucher &&
+          (!resource!.requiresVoucher || exonerated) &&
           fromStatus === ReservationStatus.PENDING_PAYMENT &&
           dto.status === ReservationStatus.APPROVED;
 
@@ -496,10 +544,12 @@ export class ReservationsService {
           );
         }
 
-        // 2. Aprobar exige un pago registrado SOLO si el recurso pide boleta (FLO-1).
+        // 2. Aprobar exige un pago registrado SOLO si el recurso pide boleta
+        //    (FLO-1) y la reserva no está exonerada.
         if (
           dto.status === ReservationStatus.APPROVED &&
-          resource!.requiresVoucher
+          resource!.requiresVoucher &&
+          !exonerated
         ) {
           const payment = await manager.findOne(Payment, {
             where: { reservationId: id },
@@ -514,8 +564,9 @@ export class ReservationsService {
         // 2b. CR-7: aprobar un recurso SIN comprobante exige el número de la
         // boleta física (pagan en efectivo al llegar) y deja un Payment cash
         // aprobado en la misma transacción: constancia fiscalizable en vez de
-        // la aprobación "al aire" que permitía FLO-1.
-        if (approveWithoutVoucher) {
+        // la aprobación "al aire" que permitía FLO-1. Una exonerada no paga
+        // nada → sin boleta ni Payment.
+        if (approveWithoutVoucher && !exonerated) {
           if (!dto.receiptNumber) {
             throw new BadRequestException(
               'Para aprobar esta reserva debes indicar el número de boleta.',
@@ -544,10 +595,12 @@ export class ReservationsService {
         }
         // CR-4: primera confirmación (aceptar). La ventana de pago arranca
         // AQUÍ, no al crear: así el plazo no se quema esperando al admin.
+        // Una exonerada no espera boleta → sin deadline (el cron no la expira).
         if (
           fromStatus === ReservationStatus.PENDING_CONFIRMATION &&
           dto.status === ReservationStatus.PENDING_PAYMENT &&
-          resource!.requiresVoucher
+          resource!.requiresVoucher &&
+          !exonerated
         ) {
           const deadline = new Date();
           deadline.setHours(deadline.getHours() + resource!.paymentWindowHours);
@@ -598,115 +651,13 @@ export class ReservationsService {
     return reservation;
   }
 
-  // FLO-2: descuento por carta/oferta (monto FIJO en Q), solo ADMIN. totalAmount
-  // queda SIEMPRE como el monto final a pagar (ARQ-1: el front nunca calcula);
-  // el original se reconstruye sumando el descuento vigente, así que re-aplicar
-  // recalcula desde el original (corrige sin tener que quitar antes) y amount=0
-  // elimina el descuento. Genérico para cualquier recurso (Florencia es el caso
-  // que lo motiva), solo mientras el pago no está resuelto.
-  async applyDiscount(
-    id: string,
-    dto: ApplyDiscountDto,
-    user: AuthUser,
-    ipAddress?: string,
-  ) {
-    const round2 = (n: number) => Math.round(n * 100) / 100;
-
-    const { reservation, oldValues } = await this.dataSource.transaction(
-      async (manager) => {
-        // Candado pesimista: serializa contra updateStatus/reasignaciones que
-        // leen o congelan el monto en paralelo.
-        const found = await manager.findOne(Reservation, {
-          where: { id },
-          lock: { mode: 'pessimistic_write' },
-        });
-        if (!found) {
-          throw new NotFoundException('Reserva no encontrada.');
-        }
-
-        // ADM-1: solo reservas de recursos de las sedes del actor.
-        const resource = await manager.findOne(Resource, {
-          where: { id: found.resourceId },
-        });
-        if (!user.isSuperAdmin) {
-          assertSedeAccess(user, resource!.sedeId);
-        }
-
-        if (!this.discountableStatuses.includes(found.status)) {
-          throw new BadRequestException(
-            'Solo se puede modificar el descuento mientras la reserva está pendiente de pago o en revisión.',
-          );
-        }
-
-        // Monto original (sin descuento): base para aplicar, corregir o quitar.
-        const original = round2(
-          found.totalAmount + (found.discountAmount ?? 0),
-        );
-        const oldValues = {
-          totalAmount: found.totalAmount,
-          discountAmount: found.discountAmount,
-          discountReason: found.discountReason,
-        };
-
-        if (dto.amount === 0) {
-          if (found.discountAmount === null) {
-            throw new BadRequestException(
-              'La reserva no tiene un descuento que quitar.',
-            );
-          }
-          found.discountAmount = null;
-          found.discountReason = null;
-          found.discountAppliedBy = null;
-          found.discountAppliedAt = null;
-          found.totalAmount = original;
-        } else {
-          if (!dto.reason) {
-            throw new BadRequestException(
-              'El descuento requiere una justificación (carta u oferta).',
-            );
-          }
-          if (dto.amount > original) {
-            throw new BadRequestException(
-              `El descuento (Q${dto.amount}) no puede exceder el monto original (Q${original}).`,
-            );
-          }
-          found.discountAmount = dto.amount;
-          found.discountReason = dto.reason;
-          found.discountAppliedBy = user.id;
-          found.discountAppliedAt = new Date();
-          found.totalAmount = round2(original - dto.amount);
-        }
-
-        await manager.save(found);
-        return { reservation: found, oldValues };
-      },
-    );
-
-    // Auditoría fuera de la transacción (mismo criterio que updateStatus).
-    await this.auditService.createLog(
-      'Reservation',
-      dto.amount === 0 ? 'REMOVE_DISCOUNT' : 'APPLY_DISCOUNT',
-      user.id,
-      id,
-      oldValues,
-      {
-        totalAmount: reservation.totalAmount,
-        discountAmount: reservation.discountAmount,
-        discountReason: reservation.discountReason,
-      },
-      ipAddress,
-    );
-
-    return reservation;
-  }
-
   // CR-3: el admin fija el PRECIO FINAL de una reserva puntual (carta/acuerdo
   // que no encaja como descuento simple, o un ajuste hacia arriba). Se apoya en
   // las MISMAS columnas de FLO-2: discountAmount = original − nuevo precio
   // (negativo si el precio sube), así el monto original nunca se pierde y las
   // dos vías (descuento y precio) son consistentes entre sí. totalAmount sigue
   // siendo SIEMPRE el monto final a pagar (ARQ-1). Misma ventana y candado que
-  // applyDiscount: solo mientras el pago no está resuelto.
+  // solo mientras el pago no está resuelto.
   async setPrice(
     id: string,
     dto: SetPriceDto,
@@ -717,7 +668,7 @@ export class ReservationsService {
 
     const { reservation, oldValues } = await this.dataSource.transaction(
       async (manager) => {
-        // Candado pesimista: serializa contra updateStatus/applyDiscount.
+        // Candado pesimista: serializa contra updateStatus.
         const found = await manager.findOne(Reservation, {
           where: { id },
           lock: { mode: 'pessimistic_write' },
@@ -773,12 +724,31 @@ export class ReservationsService {
           found.totalAmount = round2(dto.newTotal);
         }
 
+        // Exoneración vs. ventana de pago (canchas con boleta): a Q0 se quita
+        // el deadline (no espera boleta, el cron no debe expirarla); si vuelve
+        // a ser > 0 en pending_payment, se abre una ventana fresca.
+        if (
+          found.status === ReservationStatus.PENDING_PAYMENT &&
+          resource!.type === ResourceType.COURT &&
+          resource!.requiresVoucher
+        ) {
+          if (found.totalAmount === 0) {
+            found.paymentDeadline = null;
+          } else if (!found.paymentDeadline) {
+            const deadline = new Date();
+            deadline.setHours(
+              deadline.getHours() + resource!.paymentWindowHours,
+            );
+            found.paymentDeadline = deadline;
+          }
+        }
+
         await manager.save(found);
         return { reservation: found, oldValues };
       },
     );
 
-    // Auditoría fuera de la transacción (mismo criterio que applyDiscount).
+    // Auditoría fuera de la transacción (mismo criterio que updateStatus).
     await this.auditService.createLog(
       'Reservation',
       'SET_PRICE',
@@ -1415,6 +1385,7 @@ export class ReservationsService {
   async cancel(id: string, userId: string) {
     const reservation = await this.reservationRepository.findOne({
       where: { id, userId },
+      relations: ['user', 'resource'],
     });
 
     if (!reservation) {
@@ -1437,17 +1408,27 @@ export class ReservationsService {
     log.reason = 'Cancelada por el usuario';
     await this.logRepository.save(log);
 
+    // Aviso de anulación (best-effort: el método traga errores de SMTP).
+    if (reservation.user) {
+      await this.notificationsService.sendReservationStatusEmail(
+        reservation.user,
+        reservation,
+        ReservationStatus.CANCELLED,
+      );
+    }
+
     return { message: 'Reserva cancelada correctamente.' };
   }
 
-  // Job que expira reservas con payment_deadline vencido
+  // Cron cada 5 min: expira reservas vencidas y recuerda validaciones pendientes.
   @Cron(CronExpression.EVERY_5_MINUTES)
   async expireOverdueReservations() {
-    // UPDATE + logs en una sola transacción: o se expiran las reservas Y se
-    // escriben sus logs, o no pasa nada. Antes el log iba fuera del UPDATE y un
-    // fallo dejaba reservas EXPIRED sin rastro.
-    return this.dataSource.transaction(async (manager) => {
-      const result = await manager
+    // Dos barridos de expiración en una sola transacción (todo o nada con sus logs):
+    // (1) pending_payment con payment_deadline vencido.
+    // (2) pending_confirmation sin la 1ª confirmación dentro de su ventana.
+    // Ambos liberan el slot: 'expired' sale del set activo.
+    const expiredIds = await this.dataSource.transaction(async (manager) => {
+      const paymentSweep = await manager
         .createQueryBuilder()
         .update(Reservation)
         .set({ status: ReservationStatus.EXPIRED })
@@ -1458,28 +1439,135 @@ export class ReservationsService {
         .andWhere('paymentDeadline < :now', { now: new Date() })
         .returning(['id'])
         .execute();
+      const paymentIds = (paymentSweep.raw as { id: string }[]).map(
+        (r) => r.id,
+      );
 
-      const expiredIds = (result.raw as { id: string }[]).map((r) => r.id);
+      const confRows: { id: string }[] = await manager.query(`
+        UPDATE "reservations" r
+        SET status = 'expired'
+        FROM "resources" res
+        WHERE r.resource_id = res.id
+          AND r.status = 'pending_confirmation'
+          AND r.created_at + (res.confirmation_window_hours * interval '1 hour') < now()
+        RETURNING r.id
+      `);
+      const confIds = confRows.map((r) => r.id);
 
-      if (expiredIds.length === 0) {
-        return 0;
-      }
-
-      // Dejar rastro en el LOG para cada reserva expirada
-      const logs = expiredIds.map((id) => {
+      const logs: ReservationLog[] = [];
+      for (const id of paymentIds) {
         const log = new ReservationLog();
         log.reservationId = id;
         log.fromStatus = ReservationStatus.PENDING_PAYMENT;
         log.toStatus = ReservationStatus.EXPIRED;
         log.changedById = null;
-        log.reason =
-          'Expirada automaticamente por vencimiento de plazo de pago';
-        return log;
-      });
+        log.reason = 'Expirada por vencimiento del plazo de pago';
+        logs.push(log);
+      }
+      for (const id of confIds) {
+        const log = new ReservationLog();
+        log.reservationId = id;
+        log.fromStatus = ReservationStatus.PENDING_CONFIRMATION;
+        log.toStatus = ReservationStatus.EXPIRED;
+        log.changedById = null;
+        log.reason = 'Expirada por falta de confirmación de la administración';
+        logs.push(log);
+      }
+      if (logs.length > 0) {
+        await manager.save(logs);
+      }
 
-      await manager.save(logs);
-
-      return expiredIds.length;
+      return [...paymentIds, ...confIds];
     });
+
+    // Aviso de vencimiento al ciudadano, FUERA de la transacción y best-effort.
+    if (expiredIds.length > 0) {
+      const expired = await this.reservationRepository.find({
+        where: { id: In(expiredIds) },
+        relations: ['user', 'resource'],
+      });
+      for (const reservation of expired) {
+        if (reservation.user) {
+          await this.notificationsService.sendReservationStatusEmail(
+            reservation.user,
+            reservation,
+            ReservationStatus.EXPIRED,
+          );
+        }
+      }
+    }
+
+    await this.remindPendingReviews();
+    return expiredIds.length;
+  }
+
+  // POL-2: recuerda a la administración las boletas en revisión que superaron su
+  // validation_window_minutes. Una sola vez por reserva (review_reminded_at), así
+  // el cron no reenvía el aviso cada 5 min.
+  private async remindPendingReviews(): Promise<number> {
+    const rows: { id: string }[] = await this.dataSource.query(`
+      UPDATE "reservations" r
+      SET review_reminded_at = now()
+      FROM "resources" res
+      WHERE r.resource_id = res.id
+        AND r.status = 'under_review'
+        AND r.review_reminded_at IS NULL
+        AND r.updated_at + (res.validation_window_minutes * interval '1 minute') < now()
+      RETURNING r.id
+    `);
+    if (rows.length === 0) {
+      return 0;
+    }
+
+    const reservations = await this.reservationRepository.find({
+      where: { id: In(rows.map((r) => r.id)) },
+      relations: ['resource'],
+    });
+    for (const reservation of reservations) {
+      await this.notificationsService.notifyReservationPendingReview(
+        reservation,
+        reservation.resource,
+      );
+    }
+    return rows.length;
+  }
+
+  // B7: línea de tiempo de cambios de estado de una reserva (reservation_logs).
+  // El ciudadano solo ve su propia reserva; admin/operador, las de sus sedes.
+  async getHistory(id: string, user: AuthUser) {
+    const reservation = await this.reservationRepository.findOne({
+      where: { id },
+      relations: ['resource'],
+    });
+    if (!reservation) {
+      throw new NotFoundException('Reserva no encontrada.');
+    }
+
+    if (user.role === Role.CITIZEN) {
+      if (reservation.userId !== user.id) {
+        throw new ForbiddenException(
+          'No tienes permiso para ver esta reserva.',
+        );
+      }
+    } else {
+      assertSedeAccess(user, reservation.resource.sedeId);
+    }
+
+    const logs = await this.logRepository.find({
+      where: { reservationId: id },
+      relations: ['changedBy'],
+      order: { createdAt: 'ASC' },
+    });
+
+    return logs.map((log) => ({
+      id: log.id,
+      fromStatus: log.fromStatus,
+      toStatus: log.toStatus,
+      reason: log.reason,
+      createdAt: log.createdAt,
+      changedBy: log.changedBy
+        ? { id: log.changedBy.id, fullName: log.changedBy.fullName }
+        : null,
+    }));
   }
 }

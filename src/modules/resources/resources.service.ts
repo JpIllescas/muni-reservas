@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Not, In } from 'typeorm';
+import { Repository, Not, In, Between } from 'typeorm';
 import { Resource } from './entities/resource.entity';
 import { Sede } from './entities/sede.entity';
 import { ResourceSchedule } from './entities/resource-schedule.entity';
@@ -21,7 +21,12 @@ import { AuditService } from '../audit/audit.service';
 import { ResourceType } from '../../common/enums/resource-type.enum';
 import { ResourceStatus } from '../../common/enums/resource-status.enum';
 import { INACTIVE_RESERVATION_STATUSES } from '../../common/enums/reservation-status.enum';
-import { guatemalaNow, hhmmToMinutes } from '../../common/utils/date.utils';
+import {
+  guatemalaNow,
+  hhmmToMinutes,
+  addDaysToISODate,
+  dayOfWeekFromISODate,
+} from '../../common/utils/date.utils';
 import { resolveEffectiveSchedule } from './utils/schedule-resolver.util';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { assertSedeAccess } from '../../common/utils/sede-scope.util';
@@ -210,6 +215,100 @@ export class ResourcesService {
         endTime: r.endTime,
       })),
     };
+  }
+
+  // Disponibilidad por RANGO de fechas (para pintar el calendario mes/semana).
+  // Público y liviano: resuelve por día si se puede reservar y por qué no,
+  // aplicando la misma precedencia que create(): estado del recurso > excepción
+  // (REC-1) > override (REC-3) > horario semanal. En ranchos marca además los
+  // días ya reservados. Todo se calcula en memoria con 4 consultas fijas.
+  async getAvailabilityRange(resourceId: string, from: string, to: string) {
+    if (from > to) {
+      throw new BadRequestException('from debe ser anterior o igual a to.');
+    }
+    if (addDaysToISODate(from, 62) < to) {
+      throw new BadRequestException('El rango máximo es de 62 días.');
+    }
+
+    const resource = await this.resourceRepository.findOne({
+      where: { id: resourceId, isActive: true },
+      relations: ['sede'],
+    });
+    if (!resource || !resource.sede.isActive) {
+      throw new NotFoundException('Recurso no encontrado o inactivo.');
+    }
+
+    const [exceptions, overrides, schedules, reservations] = await Promise.all([
+      this.exceptionRepository.find({
+        where: { resourceId, exceptionDate: Between(from, to) },
+      }),
+      this.overrideRepository.find({
+        where: { resourceId, overrideDate: Between(from, to) },
+      }),
+      this.scheduleRepository.find({ where: { resourceId, isActive: true } }),
+      this.reservationRepository.find({
+        where: {
+          resourceId,
+          reservationDate: Between(from, to),
+          status: Not(In(INACTIVE_RESERVATION_STATUSES)),
+        },
+        select: ['id', 'reservationDate'],
+      }),
+    ]);
+
+    const exceptionByDate = new Map(
+      exceptions.map((e) => [e.exceptionDate, e.reason]),
+    );
+    const overrideDates = new Set(overrides.map((o) => o.overrideDate));
+    const openWeekdays = new Set(schedules.map((s) => s.dayOfWeek));
+    const reservedCount = new Map<string, number>();
+    for (const r of reservations) {
+      reservedCount.set(
+        r.reservationDate,
+        (reservedCount.get(r.reservationDate) ?? 0) + 1,
+      );
+    }
+
+    const statusClosed = resource.status !== ResourceStatus.AVAILABLE;
+    const statusReason = statusClosed
+      ? (resource.statusReason ?? `Recurso en ${resource.status}.`)
+      : null;
+
+    const days: {
+      date: string;
+      closed: boolean;
+      reason: string | null;
+      booked: boolean;
+    }[] = [];
+    for (let date = from; date <= to; date = addDaysToISODate(date, 1)) {
+      let closed = false;
+      let reason: string | null = null;
+
+      if (statusClosed) {
+        closed = true;
+        reason = statusReason;
+      } else if (exceptionByDate.has(date)) {
+        closed = true;
+        reason = exceptionByDate.get(date) ?? 'Fecha bloqueada';
+      } else if (
+        !overrideDates.has(date) &&
+        !openWeekdays.has(dayOfWeekFromISODate(date))
+      ) {
+        closed = true;
+        reason = 'No atiende este día';
+      }
+
+      // Rancho: una sola reserva por día → el día reservado cierra completo.
+      const booked = (reservedCount.get(date) ?? 0) > 0;
+      if (!closed && booked && resource.type === ResourceType.RANCH) {
+        closed = true;
+        reason = 'Ya está reservado';
+      }
+
+      days.push({ date, closed, reason, booked });
+    }
+
+    return { resourceId, type: resource.type, from, to, days };
   }
 
   // Actualizar un recurso

@@ -18,7 +18,6 @@ import { Reservation } from './modules/reservations/entities/reservation.entity'
 import { ReservationLog } from './modules/reservations/entities/reservation-log.entity';
 import { Payment } from './modules/payments/entities/payment.entity';
 import { AuditLog } from './modules/audit/entities/audit-log.entity';
-import { SystemConfig } from './modules/config/entities/system-config.entity';
 import { ResourceException } from './modules/resources/entities/resource-exception.entity';
 import { ResourceScheduleOverride } from './modules/resources/entities/resource-schedule-override.entity';
 import { Notification } from './modules/notifications/entities/notification.entity';
@@ -30,7 +29,6 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { AuditModule } from './modules/audit/audit.module';
-import { ConfigDbModule } from './modules/config/config-db.module';
 import { HealthModule } from './modules/health/health.module';
 import { SedesModule } from './modules/sedes/sedes.module';
 
@@ -78,7 +76,6 @@ import { SedesModule } from './modules/sedes/sedes.module';
             ReservationLog,
             Payment,
             AuditLog,
-            SystemConfig,
             Notification,
           ],
           // SIEMPRE false, también en dev: se comprobó (2026-07-13) que
@@ -110,7 +107,6 @@ import { SedesModule } from './modules/sedes/sedes.module';
     NotificationsModule,
     ReportsModule,
     AuditModule,
-    ConfigDbModule,
     HealthModule,
     SedesModule,
   ],
