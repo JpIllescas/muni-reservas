@@ -11,9 +11,9 @@ import {
 } from '@nestjs/common';
 import { ReservationsService } from './reservations.service';
 import { CreateReservationDto } from './dto/create-reservation.dto';
+import { AdminCreateReservationDto } from './dto/admin-create-reservation.dto';
 import { UpdateReservationStatusDto } from './dto/update-reservation-status.dto';
 import { ProposeReassignmentDto } from './dto/propose-reassignment.dto';
-import { ApplyDiscountDto } from './dto/apply-discount.dto';
 import { SetPriceDto } from './dto/set-price.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -32,6 +32,18 @@ export class ReservationsController {
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateReservationDto) {
     return this.reservationsService.create(user.id, dto);
+  }
+
+  // POST /api/reservations/admin - admin/operador crea una reserva a nombre de
+  // un ciudadano existente (B4), acotado a los recursos de sus sedes.
+  @Post('admin')
+  @Roles(Role.ADMIN, Role.OPERATOR)
+  adminCreate(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: AdminCreateReservationDto,
+    @Ip() ip: string,
+  ) {
+    return this.reservationsService.create(dto.userId, dto, user, ip);
   }
 
   // GET /api/reservations - admin y operador ven las reservas de sus sedes
@@ -58,6 +70,12 @@ export class ReservationsController {
     return this.reservationsService.findOne(id, user);
   }
 
+  // GET /api/reservations/:id/history - línea de tiempo de cambios de estado (B7)
+  @Get(':id/history')
+  getHistory(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.reservationsService.getHistory(id, user);
+  }
+
   // PATCH /api/reservations/:id/status - admin y operador
   @Patch(':id/status')
   @Roles(Role.ADMIN, Role.OPERATOR)
@@ -68,20 +86,6 @@ export class ReservationsController {
     @Ip() ip: string,
   ) {
     return this.reservationsService.updateStatus(id, dto, user, ip);
-  }
-
-  // PATCH /api/reservations/:id/discount - descuento por carta/oferta (FLO-2).
-  // Solo admin. amount > 0 aplica/reemplaza el descuento (reason obligatoria);
-  // amount = 0 lo quita. totalAmount queda como el monto final a pagar.
-  @Patch(':id/discount')
-  @Roles(Role.ADMIN)
-  applyDiscount(
-    @Param('id') id: string,
-    @Body() dto: ApplyDiscountDto,
-    @CurrentUser() user: AuthUser,
-    @Ip() ip: string,
-  ) {
-    return this.reservationsService.applyDiscount(id, dto, user, ip);
   }
 
   // PATCH /api/reservations/:id/price - CR-3: fijar el precio FINAL de una

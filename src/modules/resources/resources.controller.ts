@@ -19,6 +19,7 @@ import { CreateExceptionDto } from './dto/create-exception.dto';
 import { CreateScheduleOverrideDto } from './dto/create-schedule-override.dto';
 import { UpdateResourceStatusDto } from './dto/update-resource-status.dto';
 import { AvailabilityQueryDto } from './dto/availability-query.dto';
+import { AvailabilityRangeQueryDto } from './dto/availability-range-query.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -57,6 +58,20 @@ export class ResourcesController {
     @Query() query: AvailabilityQueryDto,
   ) {
     return this.resourcesService.getAvailability(id, query.date);
+  }
+
+  // GET /api/resources/:id/availability-range?from=YYYY-MM-DD&to=YYYY-MM-DD — público
+  // Disponibilidad por día para pintar el calendario (máx. 62 días).
+  @Get(':id/availability-range')
+  getAvailabilityRange(
+    @Param('id') id: string,
+    @Query() query: AvailabilityRangeQueryDto,
+  ) {
+    return this.resourcesService.getAvailabilityRange(
+      id,
+      query.from,
+      query.to,
+    );
   }
 
   // POST /api/resources — solo admin

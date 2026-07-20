@@ -4,6 +4,7 @@ import {
   Post,
   Patch,
   Param,
+  Query,
   Body,
   UseGuards,
   UseInterceptors,
@@ -41,6 +42,14 @@ export class UsersController {
   @Get('me')
   getProfile(@CurrentUser() user: AuthUser) {
     return this.usersService.findOne(user.id);
+  }
+
+  // GET /api/users/search?q= - admin/operador buscan un ciudadano para crearle
+  // una reserva (B4). Declarada ANTES de :id para que 'search' no matchee ahí.
+  @Get('search')
+  @Roles(Role.ADMIN, Role.OPERATOR)
+  search(@Query('q') q: string) {
+    return this.usersService.search(q ?? '');
   }
 
   // GET /api/users/:id - solo admin
@@ -92,18 +101,21 @@ export class UsersController {
     });
   }
 
-  // GET /api/users/:id/dpi/:side - admin/operador verifican el DPI (vecindad)
+  // GET /api/users/:id/dpi/:side - admin/operador verifican el DPI (vecindad).
+  // La consulta queda en la bitácora (VIEW_DPI) con la IP del actor.
   @Get(':id/dpi/:side')
   @Roles(Role.ADMIN, Role.OPERATOR)
   async getUserDpiFile(
     @Param('id') id: string,
     @Param('side') side: 'front' | 'back',
     @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
   ): Promise<StreamableFile> {
     const { path, contentType, fileName } = await this.usersService.getDpiFile(
       id,
       side,
       user,
+      ip,
     );
     return new StreamableFile(createReadStream(path), {
       type: contentType,

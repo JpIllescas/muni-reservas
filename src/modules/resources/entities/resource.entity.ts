@@ -76,9 +76,8 @@ export class Resource {
 
   // Ventana de pago en horas (POL-1): plazo para subir la boleta antes de que la
   // reserva expire. Configurable por la administración. Solo aplica a canchas
-  // (los ranchos pagan el día que llegan → paymentDeadline null). Default 24 =
-  // comportamiento previo hardcodeado.
-  @Column({ name: 'payment_window_hours', type: 'int', default: 24 })
+  // (los ranchos pagan el día que llegan → paymentDeadline null). Default 2h.
+  @Column({ name: 'payment_window_hours', type: 'int', default: 2 })
   paymentWindowHours: number;
 
   // FLO-1: ¿exige boleta de pago para aprobar? true (default) = flujo normal
@@ -86,6 +85,16 @@ export class Resource {
   // (Florencia): el admin aprueba directo sin boleta y la reserva no auto-expira.
   @Column({ name: 'requires_voucher', default: true })
   requiresVoucher: boolean;
+
+  // CR-4: horas que tiene la administración para dar la 1ª confirmación antes de
+  // que el cron expire una reserva en pending_confirmation y libere el slot.
+  @Column({ name: 'confirmation_window_hours', type: 'int', default: 24 })
+  confirmationWindowHours: number;
+
+  // POL-2: minutos que tiene la administración para validar una boleta antes de
+  // que el cron mande un recordatorio (no cambia el estado; solo avisa).
+  @Column({ name: 'validation_window_minutes', type: 'int', default: 60 })
+  validationWindowMinutes: number;
 
   // REC-2: estado operativo (mantenimiento / evento). NOT NULL default available.
   // Separado de isActive: un recurso en mantenimiento sigue activo y visible en el

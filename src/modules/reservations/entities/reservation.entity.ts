@@ -78,6 +78,11 @@ export class Reservation {
   @Column({ name: 'confirmed_at', type: 'timestamptz', nullable: true })
   confirmedAt: Date | null;
 
+  // POL-2: marca de que ya se envió el recordatorio de validación de boleta
+  // (under_review vencido). Evita que el cron reenvíe el aviso cada 5 min.
+  @Column({ name: 'review_reminded_at', type: 'timestamptz', nullable: true })
+  reviewRemindedAt: Date | null;
+
   @Column({ name: 'rejection_reason', nullable: true, type: 'text' })
   rejectionReason: string | null;
 
