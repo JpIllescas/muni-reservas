@@ -5,9 +5,7 @@ export enum ReservationStatus {
   REJECTED = 'rejected',
   EXPIRED = 'expired',
   CANCELLED = 'cancelled',
-  // CR-4: cancha con boleta recién creada, esperando la PRIMERA confirmación
-  // del admin. Al aceptar pasa a pending_payment (y ahí arranca la ventana de
-  // pago). Va al FINAL porque ALTER TYPE ADD VALUE agrega al final en Postgres.
+  // CR-4: cancha con boleta recién creada, esperando la PRIMERA confirmación.
   PENDING_CONFIRMATION = 'pending_confirmation',
 }
 
