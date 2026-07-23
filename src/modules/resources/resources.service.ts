@@ -18,8 +18,8 @@ import { CreateExceptionDto } from './dto/create-exception.dto';
 import { CreateScheduleOverrideDto } from './dto/create-schedule-override.dto';
 import { UpdateResourceStatusDto } from './dto/update-resource-status.dto';
 import { AuditService } from '../audit/audit.service';
+import { ResourceStatusesService } from '../resource-statuses/resource-statuses.service';
 import { ResourceType } from '../../common/enums/resource-type.enum';
-import { ResourceStatus } from '../../common/enums/resource-status.enum';
 import { INACTIVE_RESERVATION_STATUSES } from '../../common/enums/reservation-status.enum';
 import {
   guatemalaNow,
@@ -53,6 +53,7 @@ export class ResourcesService {
     private readonly reservationRepository: Repository<Reservation>,
 
     private readonly auditService: AuditService,
+    private readonly resourceStatusesService: ResourceStatusesService,
   ) {}
 
   // Crear un nuevo recurso (cancha o rancho)
@@ -88,9 +89,28 @@ export class ResourcesService {
   // Gate de sede: los recursos de una sede inactiva desaparecen del catálogo
   // SIN tocar su isActive (al reactivar la sede vuelven solos, sin cascada).
   async findAll() {
-    return this.resourceRepository.find({
+    const resources = await this.resourceRepository.find({
       where: { isActive: true, sede: { isActive: true } },
       order: { name: 'ASC' },
+    });
+    return this.attachStatusCatalog(resources);
+  }
+
+  // Enriquece los recursos con la etiqueta y el flag de bloqueo de su estado
+  // (REC-2), resueltos del catálogo. El endpoint del catálogo es admin/operador,
+  // así que el ciudadano recibe esta info ya resuelta aquí (no la consulta él).
+  private async attachStatusCatalog<T extends { status: string }>(
+    resources: T[],
+  ): Promise<(T & { statusLabel: string; statusBlocksReservations: boolean })[]> {
+    const catalog = await this.resourceStatusesService.findAll(true);
+    const byKey = new Map(catalog.map((s) => [s.key, s]));
+    return resources.map((r) => {
+      const s = byKey.get(r.status);
+      return {
+        ...r,
+        statusLabel: s?.label ?? r.status,
+        statusBlocksReservations: s?.blocksReservations ?? false,
+      };
     });
   }
 
@@ -124,7 +144,17 @@ export class ResourcesService {
       order: { dayOfWeek: 'ASC' },
     });
 
-    return { ...resource, schedules };
+    // REC-2: resolver etiqueta y flag de bloqueo del estado para la vista pública.
+    const statusRow = await this.resourceStatusesService.findByKeyOrNull(
+      resource.status,
+    );
+
+    return {
+      ...resource,
+      schedules,
+      statusLabel: statusRow?.label ?? resource.status,
+      statusBlocksReservations: statusRow?.blocksReservations ?? false,
+    };
   }
 
   // Disponibilidad de un recurso en una fecha concreta. Read-only: entrega los
@@ -168,9 +198,13 @@ export class ResourcesService {
       order: { startTime: 'ASC' },
     });
 
-    // REC-2: estado operativo (mantenimiento / evento) cierra el recurso aunque
-    // siga activo y con horario.
-    const inMaintenance = resource.status !== ResourceStatus.AVAILABLE;
+    // REC-2: estado operativo (catálogo) cierra el recurso aunque siga activo y
+    // con horario. El bloqueo cuelga del flag blocksReservations, no del nombre.
+    const statusRow = await this.resourceStatusesService.findByKeyOrNull(
+      resource.status,
+    );
+    const inMaintenance = statusRow?.blocksReservations ?? false;
+    const statusLabel = statusRow?.label ?? resource.status;
 
     // Cerrado: estado operativo, excepción de fecha, o el recurso no atiende ese día.
     const closed = inMaintenance || !!exception || !schedule;
@@ -179,7 +213,7 @@ export class ResourcesService {
     const reason = exception
       ? exception.reason
       : inMaintenance
-        ? (resource.statusReason ?? `Recurso en ${resource.status}.`)
+        ? (resource.statusReason ?? `Recurso en ${statusLabel}.`)
         : null;
 
     const base = {
@@ -188,6 +222,7 @@ export class ResourcesService {
       type: resource.type,
       closed,
       status: resource.status,
+      statusLabel,
       reason,
     };
 
@@ -269,9 +304,13 @@ export class ResourcesService {
       );
     }
 
-    const statusClosed = resource.status !== ResourceStatus.AVAILABLE;
+    const statusRow = await this.resourceStatusesService.findByKeyOrNull(
+      resource.status,
+    );
+    const statusClosed = statusRow?.blocksReservations ?? false;
     const statusReason = statusClosed
-      ? (resource.statusReason ?? `Recurso en ${resource.status}.`)
+      ? (resource.statusReason ??
+        `Recurso en ${statusRow?.label ?? resource.status}.`)
       : null;
 
     const days: {
@@ -752,17 +791,22 @@ export class ResourcesService {
     // ADM-1: solo recursos de las sedes del actor.
     assertSedeAccess(user, resource.sedeId);
 
+    // El estado debe existir en el catálogo y estar activo (REC-2).
+    const statusRow = await this.resourceStatusesService.findActiveByKey(
+      dto.status,
+    );
+
     const oldValue = {
       status: resource.status,
       statusReason: resource.statusReason,
     };
 
-    resource.status = dto.status;
-    // El motivo solo aplica a estados no-disponibles; al volver a available se limpia.
-    resource.statusReason =
-      dto.status === ResourceStatus.AVAILABLE
-        ? null
-        : (dto.statusReason ?? null);
+    resource.status = statusRow.key;
+    // El motivo solo aplica a estados que bloquean reservas; en un estado que no
+    // bloquea (ej. 'available') se limpia.
+    resource.statusReason = statusRow.blocksReservations
+      ? (dto.statusReason ?? null)
+      : null;
 
     const saved = await this.resourceRepository.save(resource);
 
