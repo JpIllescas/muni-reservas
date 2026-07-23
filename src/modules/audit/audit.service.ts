@@ -10,12 +10,8 @@ export class AuditService {
   constructor(
     @InjectRepository(AuditLog)
     private readonly auditRepository: Repository<AuditLog>,
-  ) {}
+  ) { }
 
-  // Método que usan los otros módulos para registrar acciones. Es "best-effort":
-  // un fallo al auditar NO debe tumbar la operación principal (que ya se ejecutó
-  // fuera de esta llamada). Se registra el error en el log del servidor para no
-  // perderlo del todo.
   async createLog(
     entityType: string,
     action: string,
@@ -77,7 +73,6 @@ export class AuditService {
         actor: `%${filters.user}%`,
       });
     }
-    // Rango por fecha (inclusive): [from 00:00, to+1día).
     if (filters.from) {
       query.andWhere('a.createdAt >= :from', { from: filters.from });
     }

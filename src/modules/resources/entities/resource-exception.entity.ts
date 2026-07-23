@@ -21,10 +21,7 @@ export class ResourceException {
   @Column({ name: 'resource_id' })
   resourceId: string;
 
-  // Tipada como string ('YYYY-MM-DD'): las columnas date de Postgres vuelven
-  // como string en TypeORM y TODO el código compara fechas por string (misma
-  // convención que Reservation.reservationDate). Antes decía Date y obligaba a
-  // castear `as any` en cada where/create.
+  // Tipada como string ('YYYY-MM-DD'): las columnas date de Postgres vuelven como string en TypeORM y TODO el código compara fechas por string 
   @Column({ name: 'exception_date', type: 'date' })
   exceptionDate: string;
 

@@ -34,7 +34,7 @@ export class User {
   @Column({ nullable: true, unique: true })
   dpi: string;
 
-  // CR-1: fotos del DPI (frente y reverso), subidas desde el perfil. Rutas del
+  // fotos del DPI (frente y reverso), subidas desde el perfil. Rutas del
   // filesystem (PII: /uploads está fuera de git). Junto con el número son
   // requisito para reservar (gate en ReservationsService.create).
   @Column({ name: 'dpi_front_path', type: 'varchar', nullable: true })
@@ -49,14 +49,10 @@ export class User {
   @Column({ type: 'enum', enum: Role, default: Role.CITIZEN })
   role: Role;
 
-  // Super-admin (ADM-1/ADM-2): un ADMIN con este flag saltea el filtro de sede
-  // (ve y gestiona todas las sedes; puede crear sedes y asignar admins). Los
-  // demás admins/operadores se acotan a sus sedes (M2M abajo). Fail-closed: un
-  // admin/operador SIN sedes y sin este flag no ve nada.
   @Column({ name: 'is_super_admin', default: false })
   isSuperAdmin: boolean;
 
-  // Sedes que este admin/operador puede gestionar (ADM-1). Vacío para ciudadanos.
+  // Sedes que este admin/operador puede gestionar. Vacío para ciudadanos.
   @ManyToMany(() => Sede)
   @JoinTable({
     name: 'user_sedes',

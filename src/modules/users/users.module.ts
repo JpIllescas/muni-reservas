@@ -12,9 +12,6 @@ import { User } from './entities/user.entity';
   imports: [
     TypeOrmModule.forFeature([User]),
 
-    // CR-1: Multer para las fotos del DPI. Solo imágenes (un DPI es una foto,
-    // no un PDF); el fileFilter por mimetype es el filtro barato NO confiable,
-    // la validación real es por magic bytes en el servicio (igual que boletas).
     MulterModule.registerAsync({
       useFactory: () => {
         const dpiDir = join(process.env.UPLOAD_PATH || './uploads', 'dpi');
@@ -55,4 +52,4 @@ import { User } from './entities/user.entity';
   providers: [UsersService],
   exports: [UsersService],
 })
-export class UsersModule {}
+export class UsersModule { }

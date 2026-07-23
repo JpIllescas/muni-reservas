@@ -13,10 +13,9 @@ export class ReportsService {
 
     @InjectRepository(Resource)
     private readonly resourceRepository: Repository<Resource>,
-  ) {}
+  ) { }
 
-  // Acota un query de reservas a las sedes del actor (ADM-1). Devuelve false si
-  // el actor no tiene acceso a ninguna sede (el caller debe responder vacío).
+  // Acota un query de reservas a las sedes del actor.
   private applySedeScope(
     qb: SelectQueryBuilder<Reservation>,
     user: AuthUser,
@@ -34,7 +33,7 @@ export class ReportsService {
     return true;
   }
 
-  // 1. Reporte: Cantidad de reservas agrupadas por su estado ( Aprobado, Pendiente, etc.)
+  // 1. Reporte: Cantidad de reservas agrupadas por su estado.
   async getReservationsByStatus(user: AuthUser) {
     const query = this.reservationRepository
       .createQueryBuilder('reservation')

@@ -14,7 +14,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     // ReservationLog se escribe vía el manager de la transacción (conexión global).
     TypeOrmModule.forFeature([Payment, Reservation]),
 
-    // CR-2: aviso a admins cuando una boleta deja la reserva en revisión.
+    // aviso a admins cuando una boleta deja la reserva en revisión.
     NotificationsModule,
 
     // Configuracion de Multer para guardar las boletas en la carpeta definida en .env

@@ -1,8 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
 import { AuthUser } from '../interfaces/auth-user.interface';
 
-// ADM-1 — Alcance multi-sede para las vistas admin/operador.
-// Regla única: el super-admin ve/gestiona TODAS las sedes.
+// Alcance multi-sede para las vistas admin/operador. El super-admin ve/gestiona TODAS las sedes.
 export function hasGlobalSedeAccess(user: AuthUser): boolean {
   return user.isSuperAdmin;
 }

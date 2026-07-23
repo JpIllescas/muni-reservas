@@ -23,10 +23,9 @@ import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('resource-statuses')
 export class ResourceStatusesController {
-  constructor(private readonly service: ResourceStatusesService) {}
+  constructor(private readonly service: ResourceStatusesService) { }
 
-  // GET /api/resource-statuses?all=true — admin y operador (para el desplegable
-  // de estado del recurso). all=true (solo admin) incluye inactivos para gestión.
+  // GET /api/resource-statuses?all=true — admin y operador 
   @Get()
   @Roles(Role.ADMIN, Role.OPERATOR)
   findAll(@Query('all') all?: string) {

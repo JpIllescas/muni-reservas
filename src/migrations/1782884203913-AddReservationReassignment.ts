@@ -1,14 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-// RES-3: reasignación de horario con aprobación del ciudadano (Shape B).
-// El admin/operador PROPONE una nueva fecha/hora en columnas `proposed_*`; la
-// reserva conserva su estado y NO ocupa el slot nuevo hasta que el ciudadano
-// acepta. Al aceptar, las columnas reales cambian y el backstop de BD
-// (excl_court_overlap / uq_ranch_active_booking) actúa como red final.
-//
-// Escrita a mano (NO migration:generate) para no re-DROPear el backstop, igual
-// que RES-2 / FLO-1 / REC-2. Columnas nullable: solo tienen valor mientras hay
-// una propuesta viva; se limpian al aceptar o rechazar.
+// reasignación de horario con aprobación del ciudadano (Shape B).
 export class AddReservationReassignment1782884203913 implements MigrationInterface {
   name = 'AddReservationReassignment1782884203913';
 

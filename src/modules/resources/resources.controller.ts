@@ -28,7 +28,7 @@ import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 
 @Controller('resources')
 export class ResourcesController {
-  constructor(private readonly resourcesService: ResourcesService) {}
+  constructor(private readonly resourcesService: ResourcesService) { }
 
   // GET /api/resources — público, cualquiera puede ver el catálogo
   @Get()
@@ -50,8 +50,7 @@ export class ResourcesController {
     return this.resourcesService.findOne(id);
   }
 
-  // GET /api/resources/:id/availability?date=YYYY-MM-DD — público
-  // Disponibilidad del recurso ese día (horario, tope y franjas ocupadas).
+  // GET /api/resources/:id/availability?date=YYYY-MM-DD — público Disponibilidad del recurso ese día (horario, tope y franjas ocupadas).
   @Get(':id/availability')
   getAvailability(
     @Param('id') id: string,
@@ -60,8 +59,7 @@ export class ResourcesController {
     return this.resourcesService.getAvailability(id, query.date);
   }
 
-  // GET /api/resources/:id/availability-range?from=YYYY-MM-DD&to=YYYY-MM-DD — público
-  // Disponibilidad por día para pintar el calendario (máx. 62 días).
+  // GET /api/resources/:id/availability-range?from=YYYY-MM-DD&to=YYYY-MM-DD — público Disponibilidad por día para pintar el calendario (máx. 62 días).
   @Get(':id/availability-range')
   getAvailabilityRange(
     @Param('id') id: string,
@@ -107,7 +105,7 @@ export class ResourcesController {
     return this.resourcesService.toggleActive(id, userInfo, ip);
   }
 
-  // PATCH /api/resources/:id/status — admin y operador (REC-2)
+  // PATCH /api/resources/:id/status — admin y operador
   @Patch(':id/status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.OPERATOR)
@@ -184,9 +182,7 @@ export class ResourcesController {
     return this.resourcesService.removeException(exceptionId, user, ip);
   }
 
-  // GET /api/resources/:id/affected-reservations?date=YYYY-MM-DD — admin y
-  // operador (REC-4): reservas vivas de esa fecha, para reasignarlas (RES-3)
-  // antes de bloquear el día (REC-1).
+  // GET /api/resources/:id/affected-reservations?date=YYYY-MM-DD — admin y operador reservas vivas de esa fecha, para reasignarlas antes de bloquear el día.
   @Get(':id/affected-reservations')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.OPERATOR)
@@ -198,7 +194,7 @@ export class ResourcesController {
     return this.resourcesService.getAffectedReservations(id, query.date, user);
   }
 
-  // POST /api/resources/:id/schedule-overrides — admin y operador (REC-3)
+  // POST /api/resources/:id/schedule-overrides — admin y operador
   @Post(':id/schedule-overrides')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.OPERATOR)
@@ -211,7 +207,7 @@ export class ResourcesController {
     return this.resourcesService.addScheduleOverride(id, dto, user, ip);
   }
 
-  // GET /api/resources/:id/schedule-overrides — admin y operador (REC-3)
+  // GET /api/resources/:id/schedule-overrides — admin y operador
   @Get(':id/schedule-overrides')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.OPERATOR)
@@ -219,7 +215,7 @@ export class ResourcesController {
     return this.resourcesService.getScheduleOverrides(id, user);
   }
 
-  // DELETE /api/resources/schedule-overrides/:overrideId — admin y operador (REC-3)
+  // DELETE /api/resources/schedule-overrides/:overrideId — admin y operador
   @Delete('schedule-overrides/:overrideId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.OPERATOR)

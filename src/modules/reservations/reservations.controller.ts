@@ -26,7 +26,7 @@ import { FindReservationsDto } from './dto/find-reservations.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('reservations')
 export class ReservationsController {
-  constructor(private readonly reservationsService: ReservationsService) {}
+  constructor(private readonly reservationsService: ReservationsService) { }
 
   // POST /api/reservations - cualquier usuario autenticado
   @Post()
@@ -34,8 +34,7 @@ export class ReservationsController {
     return this.reservationsService.create(user.id, dto);
   }
 
-  // POST /api/reservations/admin - admin/operador crea una reserva a nombre de
-  // un ciudadano existente (B4), acotado a los recursos de sus sedes.
+  // POST /api/reservations/admin - admin/operador crea una reserva a nombre de un ciudadano existente, acotado a los recursos de sus sedes.
   @Post('admin')
   @Roles(Role.ADMIN, Role.OPERATOR)
   adminCreate(
@@ -70,7 +69,7 @@ export class ReservationsController {
     return this.reservationsService.findOne(id, user);
   }
 
-  // GET /api/reservations/:id/history - línea de tiempo de cambios de estado (B7)
+  // GET /api/reservations/:id/history - línea de tiempo de cambios de estado
   @Get(':id/history')
   getHistory(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.reservationsService.getHistory(id, user);
@@ -88,9 +87,7 @@ export class ReservationsController {
     return this.reservationsService.updateStatus(id, dto, user, ip);
   }
 
-  // PATCH /api/reservations/:id/price - CR-3: fijar el precio FINAL de una
-  // reserva puntual (carta/acuerdo). Solo admin; reason obligatoria; fijar el
-  // precio original quita el ajuste vigente. Solo antes de aprobar.
+  // PATCH /api/reservations/:id/price - fijar el precio FINAL de una reserva puntual (carta/acuerdo).
   @Patch(':id/price')
   @Roles(Role.ADMIN)
   setPrice(
@@ -102,7 +99,7 @@ export class ReservationsController {
     return this.reservationsService.setPrice(id, dto, user, ip);
   }
 
-  // PATCH /api/reservations/:id/revert-rejection - revertir un rechazo (RES-1).
+  // PATCH /api/reservations/:id/revert-rejection - revertir un rechazo.
   // Exclusivo de la administración (decisión D); solo si el horario sigue libre.
   @Patch(':id/revert-rejection')
   @Roles(Role.ADMIN)
@@ -114,9 +111,7 @@ export class ReservationsController {
     return this.reservationsService.revertRejection(id, user, ip);
   }
 
-  // POST /api/reservations/:id/propose-reassignment - RES-3 (Shape B).
-  // Admin/operador propone un nuevo slot (misma cancha/rancho). NO ocupa el
-  // horario nuevo ni cambia el estado; solo lo aparta en columnas proposed_*.
+  // POST /api/reservations/:id/propose-reassignment
   @Post(':id/propose-reassignment')
   @Roles(Role.ADMIN, Role.OPERATOR)
   proposeReassignment(
@@ -128,9 +123,7 @@ export class ReservationsController {
     return this.reservationsService.proposeReassignment(id, dto, user, ip);
   }
 
-  // POST /api/reservations/:id/accept-reassignment - RES-3.
-  // El ciudadano dueño acepta: mueve la reserva al slot propuesto (validando
-  // disponibilidad en tx con locks + backstop) y limpia las columnas proposed_*.
+  // POST /api/reservations/:id/accept-reassignment.
   @Post(':id/accept-reassignment')
   acceptReassignment(
     @Param('id') id: string,
@@ -140,9 +133,7 @@ export class ReservationsController {
     return this.reservationsService.acceptReassignment(id, user, ip);
   }
 
-  // POST /api/reservations/:id/reject-reassignment - RES-3.
-  // El ciudadano dueño rechaza la propuesta: limpia proposed_*; la reserva
-  // queda intacta en su slot y estado originales.
+  // POST /api/reservations/:id/reject-reassignment 
   @Post(':id/reject-reassignment')
   rejectReassignment(
     @Param('id') id: string,

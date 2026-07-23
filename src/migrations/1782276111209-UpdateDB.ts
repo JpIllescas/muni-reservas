@@ -1,7 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-// ADM-1: modelo de Sede. UUIDs fijos para las dos sedes reales, así el seed y
-// las máquinas nuevas referencian las mismas.
+// modelo de Sede. UUIDs fijos para las dos sedes reales, así el seed y las máquinas nuevas referencian las mismas.
 const SEDE_POLVORA_ID = '11111111-1111-4111-8111-111111111111';
 const SEDE_FLORENCIA_ID = '22222222-2222-4222-8222-222222222222';
 
@@ -24,7 +23,7 @@ export class UpdateDB1782276111209 implements MigrationInterface {
       [SEDE_POLVORA_ID, SEDE_FLORENCIA_ID],
     );
 
-    // 3. Tabla puente user_sedes (M2M admin/operador ↔ sede).
+    // 3. Tabla puente user_sedes (M2M admin/operador <-> sede).
     await queryRunner.query(
       `CREATE TABLE "user_sedes" ("user_id" uuid NOT NULL, "sede_id" uuid NOT NULL, CONSTRAINT "PK_a988a3c4869441e90c7b24269da" PRIMARY KEY ("user_id", "sede_id"))`,
     );
@@ -40,19 +39,12 @@ export class UpdateDB1782276111209 implements MigrationInterface {
       `ALTER TABLE "users" ADD "is_super_admin" boolean NOT NULL DEFAULT false`,
     );
 
-    // 5. Los ADMIN existentes se promueven a super-admin: conservan el acceso
-    //    global que tenían antes de ADM-1 (no se bloquean). Los nuevos admins
-    //    se crean acotados por sede. (Los operadores quedan sin sede → no ven
-    //    nada hasta que se les asigne: fail-closed, lo buscado.)
     await queryRunner.query(
       `UPDATE "users" SET "is_super_admin" = true WHERE "role" = 'admin'`,
     );
 
-    // 6. sede_id en recursos: primero NULLABLE para no romper filas existentes.
     await queryRunner.query(`ALTER TABLE "resources" ADD "sede_id" uuid`);
 
-    // 7. Backfill por el texto de location (el seed lo trae limpio); cualquier
-    //    recurso sin coincidencia cae en La Pólvora por defecto.
     await queryRunner.query(
       `UPDATE "resources" SET "sede_id" = $1 WHERE "sede_id" IS NULL AND "location" ILIKE '%pólvora%'`,
       [SEDE_POLVORA_ID],

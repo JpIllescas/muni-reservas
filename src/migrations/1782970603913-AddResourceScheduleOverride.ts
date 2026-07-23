@@ -1,16 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-// REC-3: horario especial / override por fecha (tabla resource_schedule_overrides).
-// Escrita a mano (NO migration:generate) para no re-DROPear el backstop, igual que
-// RES-2/RES-3/REC-2. DDL calcado de resource_exceptions (misma forma: PK uuid, FK a
-// resources CASCADE + FK a users para created_by). Sin unique en BD: la unicidad
-// recurso+fecha se valida en el service (como REC-1).
-//
-// ⚠️ Es la primera migración a mano que CREA una tabla con constraints. Los nombres
-// (PK_resource_schedule_overrides, FK_rso_*) NO coinciden con los hashes que
-// `synchronize` genera en dev → la misma tabla lleva nombres distintos en dev vs prod.
-// Inocuo hoy (este `down()` dropea lo que este `up()` creó); solo importaría si un
-// futuro `migration:generate` intentara dropear estos FK por su nombre hash.
+// horario especial / override por fecha (tabla resource_schedule_overrides).
 export class AddResourceScheduleOverride1782970603913 implements MigrationInterface {
   name = 'AddResourceScheduleOverride1782970603913';
 

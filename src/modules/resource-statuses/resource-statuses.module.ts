@@ -8,8 +8,7 @@ import { ResourceStatusesService } from './resource-statuses.service';
   imports: [TypeOrmModule.forFeature([ResourceStatusEntity])],
   controllers: [ResourceStatusesController],
   providers: [ResourceStatusesService],
-  // Exportado para que ResourcesService valide/lea el estado. ReservationsService
-  // lee la tabla vía el manager de su transacción (no necesita el provider).
+  // Exportado para que ResourcesService valide/lea el estado.
   exports: [ResourceStatusesService, TypeOrmModule],
 })
-export class ResourceStatusesModule {}
+export class ResourceStatusesModule { }

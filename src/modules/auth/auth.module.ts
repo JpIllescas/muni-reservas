@@ -22,7 +22,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
       useFactory: (configService: ConfigService) => {
         const secret = configService.get<string>('JWT_SECRET');
         // JWT_EXPIRES_IN admite "7d"/"24h" o un número en SEGUNDOS ("604800").
-        // Gotcha: jsonwebtoken interpreta la STRING numérica como MILISEGUNDOS
         // ("604800" ≈ 10 min), por eso se convierte a number (= segundos).
         const rawExpiry = configService.get<string>('JWT_EXPIRES_IN')!;
         const expiresIn = /^\d+$/.test(rawExpiry)
@@ -40,4 +39,4 @@ import { NotificationsModule } from '../notifications/notifications.module';
   providers: [AuthService, JwtStrategy],
   exports: [AuthService, JwtModule],
 })
-export class AuthModule {}
+export class AuthModule { }

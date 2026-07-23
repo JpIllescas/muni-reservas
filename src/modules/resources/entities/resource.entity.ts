@@ -26,13 +26,10 @@ export class Resource {
   type: ResourceType;
 
   // Ubicación INTERNA dentro de la sede (ej. "Cancha 2, nivel superior").
-  // Texto libre informativo: la dirección/lugar real del complejo vive en la
-  // entidad Sede (decisión: se conserva redefinida, no se elimina).
   @Column({ nullable: true })
   location: string;
 
-  // Sede a la que pertenece el recurso (ADM-1). NOT NULL: todo recurso vive en
-  // una sede. El filtrado admin/operador por sede cuelga de esta relación.
+  // Sede a la que pertenece el recurso. NOT NULL: todo recurso vive en una sede. El filtrado admin/operador por sede cuelga de esta relación.
   @ManyToOne(() => Sede, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'sede_id' })
   sede: Sede;
@@ -44,8 +41,7 @@ export class Resource {
   @Column({ nullable: true })
   capacity: number;
 
-  // Las columnas decimal de Postgres vuelven como string en TypeORM; el
-  // transformer las convierte a number al leer (igual que Reservation.totalAmount).
+  // Las columnas decimal de Postgres vuelven como string en TypeORM; el transformer las convierte a number al leer (igual que Reservation.totalAmount).
   @Column({
     name: 'price_per_unit',
     type: 'decimal',
@@ -73,38 +69,27 @@ export class Resource {
   })
   maxDurationMinutes: number | null;
 
-  // Ventana de pago en horas (POL-1): plazo para subir la boleta antes de que la
-  // reserva expire. Configurable por la administración. Solo aplica a canchas
-  // (los ranchos pagan el día que llegan → paymentDeadline null). Default 2h.
+  // Ventana de pago en horas plazo para subir la boleta antes de que la reserva expire. Configurable por la administración. Solo aplica a canchas
   @Column({ name: 'payment_window_hours', type: 'int', default: 2 })
   paymentWindowHours: number;
 
-  // FLO-1: ¿exige boleta de pago para aprobar? true (default) = flujo normal
-  // (subir boleta → revisión → aprobar). false = confirmación por llamada
-  // (Florencia): el admin aprueba directo sin boleta y la reserva no auto-expira.
+  // ¿exige boleta de pago para aprobar? true (default) = flujo normal (subir boleta → revisión → aprobar). false = confirmación por llamada
   @Column({ name: 'requires_voucher', default: true })
   requiresVoucher: boolean;
 
-  // CR-4: horas que tiene la administración para dar la 1ª confirmación antes de
-  // que el cron expire una reserva en pending_confirmation y libere el slot.
+  // horas que tiene la administración para dar la 1ª confirmación antes de que el cron expire una reserva en pending_confirmation y libere el slot.
   @Column({ name: 'confirmation_window_hours', type: 'int', default: 24 })
   confirmationWindowHours: number;
 
-  // POL-2: minutos que tiene la administración para validar una boleta antes de
-  // que el cron mande un recordatorio (no cambia el estado; solo avisa).
+  // minutos que tiene la administración para validar una boleta.
   @Column({ name: 'validation_window_minutes', type: 'int', default: 60 })
   validationWindowMinutes: number;
 
-  // REC-2: estado operativo (catálogo resource_statuses). Guarda la `key` del
-  // estado (FK -> resource_statuses.key). NOT NULL default 'available'. Separado
-  // de isActive: un recurso en mantenimiento sigue activo pero no admite reservas.
-  // Se resuelve por separado (no hay relación TypeORM) para no forzar un JOIN
-  // bajo el bloqueo pesimista de create/revert/reassign.
+  // estado operativo (catálogo resource_statuses). Guarda la `key` del estado (FK -> resource_statuses.key).
   @Column({ type: 'varchar', default: 'available' })
   status: string;
 
-  // Motivo del estado (ej. "Cancha cerrada por torneo X"). null cuando está
-  // available. Se muestra al ciudadano en la disponibilidad.
+  // Motivo del estado (ej. "Cancha cerrada por torneo X"). null cuando está available. Se muestra al ciudadano en la disponibilidad.
   @Column({ name: 'status_reason', type: 'text', nullable: true })
   statusReason: string | null;
 

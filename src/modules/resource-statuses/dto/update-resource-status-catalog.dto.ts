@@ -8,8 +8,7 @@ import {
   Min,
 } from 'class-validator';
 
-// Actualización del catálogo. `key` NO figura: es inmutable (el FK apunta a ella
-// sin ON UPDATE CASCADE). Solo se editan la etiqueta, los flags y el orden.
+// Actualización del catálogo. `key` NO figura: es inmutable
 export class UpdateResourceStatusCatalogDto {
   @IsOptional()
   @IsString()

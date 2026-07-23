@@ -37,9 +37,9 @@ export class PaymentsService {
     // AuditModule es @Global: se inyecta sin importar el módulo.
     private readonly auditService: AuditService,
 
-    // CR-2: aviso a los admins cuando una reserva entra a revisión.
+    // aviso a los admins cuando una reserva entra a revisión.
     private readonly notificationsService: NotificationsService,
-  ) {}
+  ) { }
 
   async uploadVoucher(
     reservationId: string,
@@ -62,14 +62,14 @@ export class PaymentsService {
       );
     }
 
-    // CR-2: referencia para el aviso a admins post-commit.
+    // referencia para el aviso a admins post-commit.
     let notifyReservation: Reservation | null = null;
 
     // --- Try/catch envolviendo la transacción ---
     let result: { message: string };
     try {
       result = await this.dataSource.transaction(async (manager) => {
-        // Con resource: para el aviso a los admins de la sede (CR-2).
+        // Con resource: para el aviso a los admins de la sede.
         const reservation = await manager.findOne(Reservation, {
           where: { id: reservationId, userId },
           relations: ['resource'],
@@ -122,8 +122,7 @@ export class PaymentsService {
       throw error;
     }
 
-    // CR-2: la reserva entró a revisión → aviso a los admins de la sede.
-    // FUERA de la transacción y best-effort (no toca el pago ya commiteado).
+    // la reserva entró a revisión -> aviso a los admins de la sede.
     if (notifyReservation) {
       await this.notificationsService.notifyReservationPendingReview(
         notifyReservation,
@@ -134,11 +133,7 @@ export class PaymentsService {
     return result;
   }
 
-  // CR-5: el ciudadano pagó EN EFECTIVO en la cancha y el admin/operador sube
-  // la boleta en su nombre. Mismo flujo que uploadVoucher (magic bytes, tx,
-  // limpieza de huérfanos, pasa a under_review) pero con gating de sede (ADM-1),
-  // método cash, número de boleta obligatorio y auditoría de la acción admin.
-  // La aprobación sigue siendo updateStatus: la máquina de estados no cambia.
+  // el ciudadano pagó EN EFECTIVO en la cancha y el admin/operador sube la boleta en su nombre.
   async uploadVoucherByAdmin(
     reservationId: string,
     actor: AuthUser,
@@ -161,14 +156,13 @@ export class PaymentsService {
       );
     }
 
-    // CR-2: referencia para el aviso a admins post-commit.
+    // referencia para el aviso a admins post-commit.
     let notifyReservation: Reservation | null = null;
 
     let result: { message: string };
     try {
       result = await this.dataSource.transaction(async (manager) => {
-        // Con resource para el chequeo de sede; sin filtrar por userId (la
-        // reserva es del ciudadano, no del actor).
+        // Con resource para el chequeo de sede; sin filtrar por userId 
         const reservation = await manager.findOne(Reservation, {
           where: { id: reservationId },
           relations: ['resource'],
@@ -178,7 +172,7 @@ export class PaymentsService {
           throw new NotFoundException('Reserva no encontrada.');
         }
 
-        // Admin/operador solo registra pagos de recursos de sus sedes (ADM-1).
+        // Admin/operador solo registra pagos de recursos de sus sedes.
         if (!actor.isSuperAdmin) {
           assertSedeAccess(actor, reservation.resource.sedeId);
         }
@@ -227,8 +221,7 @@ export class PaymentsService {
       throw error;
     }
 
-    // Auditoría de la acción administrativa, FUERA del try/catch: si fallara,
-    // el pago ya está commiteado y el archivo NO debe borrarse.
+    // Auditoría de la acción administrativa
     await this.auditService.createLog(
       'Payment',
       'ADMIN_UPLOAD_VOUCHER',
@@ -243,8 +236,7 @@ export class PaymentsService {
       ipAddress,
     );
 
-    // CR-2: la reserva entró a revisión → aviso a los admins de la sede,
-    // excluyendo al actor (él mismo registró el pago). Best-effort.
+    // la reserva entró a revisión -> aviso a los admins de la sede,
     if (notifyReservation) {
       await this.notificationsService.notifyReservationPendingReview(
         notifyReservation,
@@ -267,8 +259,7 @@ export class PaymentsService {
       throw new NotFoundException('Reserva no encontrada.');
     }
 
-    // 2. Autorización: el ciudadano solo ve la suya; admin/operador solo las de
-    //    sus sedes (ADM-1); el super-admin, cualquiera.
+    // 2. Autorización: el ciudadano solo ve la suya; admin/operador solo las de sus sedes; el super-admin, cualquiera.
     if (user.role === Role.CITIZEN) {
       if (reservation.userId !== user.id) {
         throw new ForbiddenException(

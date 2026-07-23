@@ -42,9 +42,7 @@ export class Reservation {
   @Column({ name: 'reservation_date', type: 'date' })
   reservationDate: string;
 
-  // Monto total calculado y persistido en el BACKEND (ARQ-1). El frontend solo
-  // lo muestra; nunca lo calcula. Las columnas decimal de Postgres vuelven como
-  // string en TypeORM, por eso el transformer las convierte a number al leer.
+  // Monto total calculado y persistido en el BACKEND.
   @Column({
     name: 'total_amount',
     type: 'decimal',
@@ -78,32 +76,25 @@ export class Reservation {
   @Column({ name: 'confirmed_at', type: 'timestamptz', nullable: true })
   confirmedAt: Date | null;
 
-  // POL-2: marca de que ya se envió el recordatorio de validación de boleta
-  // (under_review vencido). Evita que el cron reenvíe el aviso cada 5 min.
+  // marca de que ya se envió el recordatorio de validación de boleta. Evita que el cron reenvíe el aviso cada 5 min.
   @Column({ name: 'review_reminded_at', type: 'timestamptz', nullable: true })
   reviewRemindedAt: Date | null;
 
   @Column({ name: 'rejection_reason', nullable: true, type: 'text' })
   rejectionReason: string | null;
 
-  // Motivo del catálogo elegido al rechazar (para reportes por motivo). null si
-  // el rechazo usó texto libre. El texto mostrado vive en rejectionReason.
+  // Motivo del catálogo elegido al rechazar 
   @Column({ name: 'rejection_reason_id', type: 'uuid', nullable: true })
   rejectionReasonId: string | null;
 
-  // RES-2: datos de contacto del ENCARGADO de la reserva (a quién llamar/confirmar
-  // el día del evento; puede no ser el titular de la cuenta). Obligatorios en el DTO
-  // de creación; nullable en BD para no romper las reservas previas a RES-2.
+  // datos de contacto del ENCARGADO de la reserva 
   @Column({ name: 'contact_name', type: 'varchar', nullable: true })
   contactName: string | null;
 
   @Column({ name: 'contact_phone', type: 'varchar', nullable: true })
   contactPhone: string | null;
 
-  // RES-3: propuesta de reasignación de horario (Shape B). El admin/operador
-  // propone un nuevo slot aquí sin tocar el estado ni ocupar el horario nuevo;
-  // solo tienen valor mientras hay una propuesta viva. Se limpian (a null) cuando
-  // el ciudadano acepta (se mueven a los campos reales) o rechaza la propuesta.
+  // propuesta de reasignación de horario.
   @Column({ name: 'proposed_date', type: 'date', nullable: true })
   proposedDate: string | null;
 
@@ -119,11 +110,11 @@ export class Reservation {
 
   @Column({ name: 'proposed_at', type: 'timestamptz', nullable: true })
   proposedAt: Date | null;
-  // CR-6: motivo de la propuesta de reasignación (se le muestra al ciudadano la razon)
+  // motivo de la propuesta de reasignación (se le muestra al ciudadano la razon)
   @Column({ name: 'proposed_reason', type: 'text', nullable: true })
   proposedReason: string | null;
 
-  // FLO-2: descuento por carta/oferta aplicado por un admin. `totalAmount`
+  // descuento por carta/oferta aplicado por un admin. `totalAmount`
   @Column({
     name: 'discount_amount',
     type: 'decimal',

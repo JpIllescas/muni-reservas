@@ -28,7 +28,7 @@ import { Role } from '../common/enums/role.enum';
 const COURT_ID = '57be2613-e4b6-4c81-872c-d765149cd412';
 const RANCH_ID = '46f3083e-eb4b-4eae-82cc-a857137996de';
 
-// Sedes reales (ADM-1). Mismos UUID que la migración de Sede.
+// Sedes reales. Mismos UUID que la migración de Sede.
 const SEDE_POLVORA_ID = '11111111-1111-4111-8111-111111111111';
 const SEDE_FLORENCIA_ID = '22222222-2222-4222-8222-222222222222';
 

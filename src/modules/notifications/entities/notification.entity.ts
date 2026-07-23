@@ -9,9 +9,7 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
-// CR-2: notificación EN el sistema (apartado de notificaciones). Hoy la genera
-// una reserva que entra "por autorizar" (aviso a admins/operadores de la sede),
-// pero la tabla es genérica: cualquier aviso futuro a cualquier usuario.
+// notificación EN el sistema (apartado de notificaciones).
 @Entity('notifications')
 @Index(['userId', 'isRead']) // <--- para el contador de no leídas
 @Index(['userId', 'createdAt']) // <--- para el listado propio
@@ -27,9 +25,6 @@ export class Notification {
   @Column({ name: 'user_id' })
   userId: string;
 
-  // Discriminador para que el front pueda enrutar/iconear (p. ej.
-  // 'reservation_pending_review'). String plano, sin enum de BD: agregar tipos
-  // nuevos no debe exigir migración.
   @Column()
   type: string;
 
@@ -39,8 +34,7 @@ export class Notification {
   @Column({ type: 'text' })
   message: string;
 
-  // Referencia plana a la reserva que la originó (sin FK, mismo criterio que
-  // proposed_by/contact_*: si la reserva se borra, la notificación sobrevive).
+  // Referencia a la reserva que la originó
   @Column({ name: 'reservation_id', type: 'uuid', nullable: true })
   reservationId: string | null;
 
