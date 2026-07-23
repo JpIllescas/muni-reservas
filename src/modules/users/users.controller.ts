@@ -16,11 +16,14 @@ import { createReadStream } from 'fs';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
 import type { DpiFiles } from './users.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { UploadDpiDto } from './dto/upload-dpi.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Role } from '../../common/enums/role.enum';
@@ -29,7 +32,7 @@ import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) { }
 
   // GET /api/users - Solo admin
   @Get()
@@ -38,14 +41,24 @@ export class UsersController {
     return this.usersService.findAll();
   }
 
+  // POST /api/users - alta directa de una cuenta administrativa (admin/operador).
+  @Post()
+  @UseGuards(SuperAdminGuard)
+  create(
+    @Body() dto: CreateUserDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.usersService.createByAdmin(dto, user.id, ip);
+  }
+
   // GET /api/users/me - cualquier usuario autenticado ve su propio perfil
   @Get('me')
   getProfile(@CurrentUser() user: AuthUser) {
     return this.usersService.findOne(user.id);
   }
 
-  // GET /api/users/search?q= - admin/operador buscan un ciudadano para crearle
-  // una reserva (B4). Declarada ANTES de :id para que 'search' no matchee ahí.
+  // GET /api/users/search?q= - admin/operador buscan un ciudadano para crearle una reserva. Declarada ANTES de :id para que 'search' no matchee ahí.
   @Get('search')
   @Roles(Role.ADMIN, Role.OPERATOR)
   search(@Query('q') q: string) {
@@ -65,9 +78,7 @@ export class UsersController {
     return this.usersService.updateProfile(user.id, dto);
   }
 
-  // POST /api/users/me/dpi - CR-1: subir las DOS fotos del DPI (form-data:
-  // dpiFront + dpiBack) y, si aún no está fijado, el número. Requisito para
-  // poder reservar.
+  // POST /api/users/me/dpi - subir las DOS fotos del DPI (form-data: dpiFront + dpiBack) y, si aún no está fijado, el número. Requisito para poder reservar.
   @Post('me/dpi')
   @UseInterceptors(
     FileFieldsInterceptor([
@@ -144,5 +155,17 @@ export class UsersController {
     @Ip() ip: string,
   ) {
     return this.usersService.toggleActive(id, user.id, ip);
+  }
+
+  // PATCH /api/users/:id - edición de una cuenta administrativa (nombre, correo, teléfono, reseteo de contraseña). 
+  @Patch(':id')
+  @UseGuards(SuperAdminGuard)
+  update(
+    @Param('id') id: string,
+    @Body() dto: AdminUpdateUserDto,
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string,
+  ) {
+    return this.usersService.updateByAdmin(id, dto, user.id, ip);
   }
 }

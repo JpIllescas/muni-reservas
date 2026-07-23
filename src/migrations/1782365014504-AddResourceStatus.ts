@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-// REC-2: estado operativo del recurso (mantenimiento / evento) + motivo.
-// Escrita a mano (NO migration:generate) para no re-DROPear el backstop
-// (excl_court_overlap / uq_ranch_active_booking), igual que FLO-1.
+// estado operativo del recurso (mantenimiento / evento) + motivo. Escrita a mano.
 export class AddResourceStatus1782365014504 implements MigrationInterface {
   name = 'AddResourceStatus1782365014504';
 

@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-// Catálogo de motivos de rechazo + FK en reservations (para reportes por motivo).
-// El "no autorizado" de la muni entra como un motivo sembrado; NO es un estado
-// nuevo: la reserva sigue en 'rejected'.
+// Catálogo de motivos de rechazo + FK en reservations.
 export class AddRejectionReasons1784200000000 implements MigrationInterface {
   name = 'AddRejectionReasons1784200000000';
 
@@ -29,8 +27,7 @@ export class AddRejectionReasons1784200000000 implements MigrationInterface {
       ('Fuera de política', 'La solicitud no cumple con las políticas de uso del recurso.', 4)
     `);
 
-    // FK opcional en reservations (reporte por motivo). ON DELETE SET NULL: si se
-    // borrara un motivo, la reserva conserva su texto en rejection_reason.
+    // FK opcional en reservations
     await queryRunner.query(`
       ALTER TABLE "reservations"
       ADD COLUMN "rejection_reason_id" uuid,

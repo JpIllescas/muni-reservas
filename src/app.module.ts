@@ -84,11 +84,6 @@ import { ResourceStatusesModule } from './modules/resource-statuses/resource-sta
             RejectionReason,
             ResourceStatusEntity,
           ],
-          // SIEMPRE false, también en dev: se comprobó (2026-07-13) que
-          // synchronize BORRA los backstops anti-doble-reserva en cada boot
-          // (excl_court_overlap / uq_ranch_active_booking: objetos que TypeORM
-          // no modela y dropea como "desconocidos"). El esquema se maneja SOLO
-          // con migraciones, en todos los entornos.
           synchronize: false,
           logging: isProd ? ['error', 'warn'] : true,
         };
@@ -125,4 +120,4 @@ import { ResourceStatusesModule } from './modules/resource-statuses/resource-sta
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

@@ -54,11 +54,11 @@ export class ResourcesService {
 
     private readonly auditService: AuditService,
     private readonly resourceStatusesService: ResourceStatusesService,
-  ) {}
+  ) { }
 
   // Crear un nuevo recurso (cancha o rancho)
   async create(dto: CreateResourceDto, user: AuthUser, ipAddress?: string) {
-    // ADM-1: el admin solo crea en sus sedes; el super-admin en cualquiera.
+    // el admin solo crea en sus sedes; el super-admin en cualquiera.
     assertSedeAccess(user, dto.sedeId);
 
     // La sede debe existir (el FK lo impediría igual, pero damos error claro).
@@ -97,8 +97,6 @@ export class ResourcesService {
   }
 
   // Enriquece los recursos con la etiqueta y el flag de bloqueo de su estado
-  // (REC-2), resueltos del catálogo. El endpoint del catálogo es admin/operador,
-  // así que el ciudadano recibe esta info ya resuelta aquí (no la consulta él).
   private async attachStatusCatalog<T extends { status: string }>(
     resources: T[],
   ): Promise<(T & { statusLabel: string; statusBlocksReservations: boolean })[]> {
@@ -115,7 +113,7 @@ export class ResourcesService {
   }
 
   // Obtener los recursos (incluye inactivos) de las sedes del actor — panel admin.
-  // El super-admin ve todos; el resto solo los de sus sedes (ADM-1). Fail-closed.
+  // El super-admin ve todos; el resto solo los de sus sedes. Fail-closed.
   async findAllAdmin(user: AuthUser) {
     if (user.isSuperAdmin) {
       return this.resourceRepository.find({ order: { name: 'ASC' } });
@@ -144,7 +142,7 @@ export class ResourcesService {
       order: { dayOfWeek: 'ASC' },
     });
 
-    // REC-2: resolver etiqueta y flag de bloqueo del estado para la vista pública.
+    // resolver etiqueta y flag de bloqueo del estado para la vista pública.
     const statusRow = await this.resourceStatusesService.findByKeyOrNull(
       resource.status,
     );
@@ -157,18 +155,14 @@ export class ResourcesService {
     };
   }
 
-  // Disponibilidad de un recurso en una fecha concreta. Read-only: entrega los
-  // datos crudos para que el frontend pinte el desplegable (no decide la UI):
-  // horario del día, tope de duración y franjas ya ocupadas. La fecha llega
-  // validada como YYYY-MM-DD por el DTO.
+  // Disponibilidad de un recurso en una fecha concreta.
   async getAvailability(resourceId: string, date: string) {
     const resource = await this.resourceRepository.findOne({
       where: { id: resourceId, isActive: true },
       relations: ['sede'],
     });
 
-    // Gate de sede: sede inactiva = recurso invisible (mismo mensaje que un
-    // recurso inactivo para no filtrar información).
+    // Gate de sede: sede inactiva = recurso invisible (mismo mensaje que un recurso inactivo para no filtrar información).
     if (!resource || !resource.sede.isActive) {
       throw new NotFoundException('Recurso no encontrado o inactivo.');
     }
@@ -178,15 +172,14 @@ export class ResourcesService {
       where: { resourceId, exceptionDate: date },
     });
 
-    // Horario EFECTIVO del día: override por fecha (REC-3) > semanal. Si la fecha
-    // está bloqueada (excepción, REC-1) ni se resuelve: el bloqueo gana.
+    // Horario EFECTIVO del día: override por fecha > semanal. Si la fecha está bloqueada (excepción, REC-1) ni se resuelve: el bloqueo gana.
     const schedule = exception
       ? null
       : await resolveEffectiveSchedule(
-          this.scheduleRepository.manager,
-          resourceId,
-          date,
-        );
+        this.scheduleRepository.manager,
+        resourceId,
+        date,
+      );
 
     // Reservas vivas de ese recurso/fecha (las mismas que ocupan el slot en create()).
     const reservations = await this.reservationRepository.find({
@@ -198,8 +191,7 @@ export class ResourcesService {
       order: { startTime: 'ASC' },
     });
 
-    // REC-2: estado operativo (catálogo) cierra el recurso aunque siga activo y
-    // con horario. El bloqueo cuelga del flag blocksReservations, no del nombre.
+    // estado operativo (catálogo) cierra el recurso aunque siga activo y con horario. El bloqueo cuelga del flag blocksReservations, no del nombre.
     const statusRow = await this.resourceStatusesService.findByKeyOrNull(
       resource.status,
     );
@@ -240,10 +232,10 @@ export class ResourcesService {
       maxDurationMinutes: resource.maxDurationMinutes,
       schedule: schedule
         ? {
-            openTime: schedule.openTime,
-            closeTime: schedule.closeTime,
-            slotDurationMin: schedule.slotDurationMin,
-          }
+          openTime: schedule.openTime,
+          closeTime: schedule.closeTime,
+          slotDurationMin: schedule.slotDurationMin,
+        }
         : null,
       occupied: reservations.map((r) => ({
         startTime: r.startTime,
@@ -253,10 +245,6 @@ export class ResourcesService {
   }
 
   // Disponibilidad por RANGO de fechas (para pintar el calendario mes/semana).
-  // Público y liviano: resuelve por día si se puede reservar y por qué no,
-  // aplicando la misma precedencia que create(): estado del recurso > excepción
-  // (REC-1) > override (REC-3) > horario semanal. En ranchos marca además los
-  // días ya reservados. Todo se calcula en memoria con 4 consultas fijas.
   async getAvailabilityRange(resourceId: string, from: string, to: string) {
     if (from > to) {
       throw new BadRequestException('from debe ser anterior o igual a to.');
@@ -359,7 +347,7 @@ export class ResourcesService {
   ) {
     const resource = await this.findOne(id);
 
-    // ADM-1: solo recursos de las sedes del actor.
+    // solo recursos de las sedes del actor.
     assertSedeAccess(user, resource.sedeId);
 
     // snapshot del estado anterior
@@ -389,7 +377,7 @@ export class ResourcesService {
       throw new NotFoundException('Recurso no encontrado.');
     }
 
-    // ADM-1: solo recursos de las sedes del actor.
+    // solo recursos de las sedes del actor.
     assertSedeAccess(user, resource.sedeId);
 
     const oldValue = resource.isActive;
@@ -426,7 +414,7 @@ export class ResourcesService {
       throw new NotFoundException('Recurso no encontrado.');
     }
 
-    // ADM-1: solo recursos de las sedes del actor.
+    // solo recursos de las sedes del actor.
     assertSedeAccess(user, resource.sedeId);
 
     const schedule = this.scheduleRepository.create({
@@ -466,7 +454,7 @@ export class ResourcesService {
       throw new NotFoundException('Horario no encontrado.');
     }
 
-    // ADM-1: el horario pertenece a un recurso → acotar por su sede.
+    // el horario pertenece a un recurso → acotar por su sede.
     const resource = await this.resourceRepository.findOne({
       where: { id: schedule.resourceId },
     });
@@ -502,7 +490,7 @@ export class ResourcesService {
       throw new NotFoundException('Recurso no encontrado.');
     }
 
-    // ADM-1: solo recursos de las sedes del actor.
+    // solo recursos de las sedes del actor.
     assertSedeAccess(user, resource.sedeId);
 
     // No se bloquean fechas en el pasado (comparación por string YYYY-MM-DD).
@@ -520,8 +508,7 @@ export class ResourcesService {
       throw new BadRequestException('Esa fecha ya está bloqueada.');
     }
 
-    // No bloquear si hay reservas vivas ese día: el bloqueo NO las cancela y
-    // solo afecta reservas nuevas. El admin debe resolverlas primero.
+    // No bloquear si hay reservas vivas ese día: el bloqueo NO las cancela y solo afecta reservas nuevas. El admin debe resolverlas primero.
     const liveReservations = await this.reservationRepository.count({
       where: {
         resourceId,
@@ -566,7 +553,7 @@ export class ResourcesService {
       throw new NotFoundException('Recurso no encontrado.');
     }
 
-    // ADM-1: solo recursos de las sedes del actor.
+    // solo recursos de las sedes del actor.
     assertSedeAccess(user, resource.sedeId);
 
     return this.exceptionRepository.find({
@@ -589,7 +576,7 @@ export class ResourcesService {
       throw new NotFoundException('Fecha bloqueada no encontrada.');
     }
 
-    // ADM-1: la excepción pertenece a un recurso → acotar por su sede.
+    // la excepción pertenece a un recurso → acotar por su sede.
     const resource = await this.resourceRepository.findOne({
       where: { id: exception.resourceId },
     });
@@ -614,11 +601,7 @@ export class ResourcesService {
     return { message: 'Fecha desbloqueada correctamente.' };
   }
 
-  // REC-4: reservas vivas de un recurso en una fecha (asignación ante imprevistos).
-  // Es el paso previo a bloquear la fecha (REC-1): addException rechaza mientras
-  // haya reservas activas ese día, y este listado se las muestra al admin (con el
-  // contacto del encargado) para reasignarlas una a una vía RES-3
-  // (propose-reassignment) antes de volver a intentar el bloqueo.
+  // reservas vivas de un recurso en una fecha (asignación ante imprevistos). Es el paso previo a bloquear la fecha addException rechaza mientras haya reservas activas ese día, y este listado se las muestra al admin
   async getAffectedReservations(
     resourceId: string,
     date: string,
@@ -632,7 +615,7 @@ export class ResourcesService {
       throw new NotFoundException('Recurso no encontrado.');
     }
 
-    // ADM-1: solo recursos de las sedes del actor.
+    // solo recursos de las sedes del actor.
     assertSedeAccess(user, resource.sedeId);
 
     return this.reservationRepository.find({
@@ -646,10 +629,7 @@ export class ResourcesService {
     });
   }
 
-  // REC-3: crear un horario especial (override) para una fecha concreta. Gana
-  // sobre el horario semanal ESE día (abre un día cerrado o cambia las horas).
-  // NO sirve para cerrar (eso es addException). El override solo afecta reservas
-  // NUEVAS; no toca ni valida las reservas vivas (misma postura que REC-1/REC-2).
+  // crear un horario especial (override) para una fecha concreta.
   async addScheduleOverride(
     resourceId: string,
     dto: CreateScheduleOverrideDto,
@@ -664,7 +644,7 @@ export class ResourcesService {
       throw new NotFoundException('Recurso no encontrado.');
     }
 
-    // ADM-1: solo recursos de las sedes del actor.
+    // solo recursos de las sedes del actor.
     assertSedeAccess(user, resource.sedeId);
 
     // No se define un horario especial para una fecha pasada.
@@ -724,7 +704,7 @@ export class ResourcesService {
       throw new NotFoundException('Recurso no encontrado.');
     }
 
-    // ADM-1: solo recursos de las sedes del actor.
+    // solo recursos de las sedes del actor.
     assertSedeAccess(user, resource.sedeId);
 
     return this.overrideRepository.find({
@@ -747,7 +727,7 @@ export class ResourcesService {
       throw new NotFoundException('Horario especial no encontrado.');
     }
 
-    // ADM-1: el override pertenece a un recurso → acotar por su sede.
+    // el override pertenece a un recurso → acotar por su sede.
     const resource = await this.resourceRepository.findOne({
       where: { id: override.resourceId },
     });
@@ -773,9 +753,7 @@ export class ResourcesService {
     return { message: 'Horario especial eliminado correctamente.' };
   }
 
-  // REC-2: cambiar el estado operativo del recurso (available / maintenance /
-  // event). No toca isActive ni cancela reservas vivas: solo bloquea reservas
-  // nuevas (vía create() y getAvailability).
+  // cambiar el estado operativo del recurso (available / maintenance / event). 
   async updateStatus(
     id: string,
     dto: UpdateResourceStatusDto,
@@ -788,10 +766,10 @@ export class ResourcesService {
       throw new NotFoundException('Recurso no encontrado.');
     }
 
-    // ADM-1: solo recursos de las sedes del actor.
+    // solo recursos de las sedes del actor.
     assertSedeAccess(user, resource.sedeId);
 
-    // El estado debe existir en el catálogo y estar activo (REC-2).
+    // El estado debe existir en el catálogo y estar activo.
     const statusRow = await this.resourceStatusesService.findActiveByKey(
       dto.status,
     );

@@ -17,8 +17,7 @@ export class CreateResourceDto {
   @IsString()
   name: string;
 
-  // Sede a la que pertenece el recurso (ADM-1, NOT NULL). El admin solo puede
-  // crear en sus propias sedes; el super-admin, en cualquiera (se valida en el servicio).
+  // Sede a la que pertenece el recurso (ADM-1, NOT NULL). El admin solo puede crear en sus propias sedes; el super-admin, en cualquiera (se valida en el servicio).
   @IsNotEmpty()
   @IsUUID()
   sedeId: string;
@@ -66,21 +65,21 @@ export class CreateResourceDto {
   @Max(72)
   paymentWindowHours?: number;
 
-  // CR-4: horas para la 1ª confirmación antes de que expire pending_confirmation. Default 24.
+  // horas para la 1ª confirmación antes de que expire pending_confirmation. Default 24.
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(168)
   confirmationWindowHours?: number;
 
-  // POL-2: minutos para validar la boleta antes de recordar a la administración. Default 60.
+  // minutos para validar la boleta antes de recordar a la administración. Default 60.
   @IsOptional()
   @IsInt()
   @Min(5)
   @Max(1440)
   validationWindowMinutes?: number;
 
-  // FLO-1: ¿exige boleta para aprobar? Default true. false = confirmación por llamada.
+  // ¿exige boleta para aprobar? Default true. false = confirmación por llamada.
   @IsOptional()
   @IsBoolean()
   requiresVoucher?: boolean;

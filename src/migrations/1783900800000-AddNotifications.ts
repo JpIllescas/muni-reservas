@@ -1,12 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-// CR-2: tabla de notificaciones en el sistema (apartado de notificaciones).
-// user_id con FK (CASCADE: las notificaciones mueren con el usuario);
-// reservation_id plano SIN FK (la notificación sobrevive a la reserva).
-//
-// Escrita a mano (NO migration:generate) para no re-DROPear el backstop; los
-// nombres de constraint difieren de los que generaría synchronize (inocuo,
-// mismo caso que resource_schedule_overrides en REC-3).
+// tabla de notificaciones en el sistema 
 export class AddNotifications1783900800000 implements MigrationInterface {
   name = 'AddNotifications1783900800000';
 

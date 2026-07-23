@@ -12,13 +12,11 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 
-// CR-2: apartado de notificaciones. Cada usuario autenticado ve y gestiona
-// SOLO las suyas (el servicio filtra por userId), sin distinción de rol: hoy
-// las reciben admins/operadores, pero el diseño sirve para cualquier usuario.
+// apartado de notificaciones. Cada usuario autenticado ve y gestiona SOLO las suyas (el servicio filtra por userId), sin distinción de rol: hoy las reciben admins/operadores, pero el diseño sirve para cualquier usuario.
 @UseGuards(JwtAuthGuard)
 @Controller('notifications')
 export class NotificationsController {
-  constructor(private readonly notificationsService: NotificationsService) {}
+  constructor(private readonly notificationsService: NotificationsService) { }
 
   // GET /api/notifications - mis notificaciones, más recientes primero
   @Get()

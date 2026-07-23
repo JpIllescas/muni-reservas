@@ -7,7 +7,7 @@ export interface AuthUser {
   role: Role;
   fullName: string;
 
-  // ADM-1: alcance multi-sede. `isSuperAdmin` saltea el filtro de sede; si es false, el actor solo puede ver/gestionar reservas y recursos de `sedeIds`.
+  // alcance multi-sede. `isSuperAdmin` saltea el filtro de sede; si es false, el actor solo puede ver/gestionar reservas y recursos de `sedeIds`.
   isSuperAdmin: boolean;
   sedeIds: string[];
 }

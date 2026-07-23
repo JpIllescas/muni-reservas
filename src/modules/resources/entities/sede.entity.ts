@@ -6,10 +6,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-// Sede / Lugar físico de la municipalidad (ADM-1). Ej: Complejo Deportivo La
-// Pólvora, Parque Ecológico Florencia. Es el cimiento del modelo multi-sede:
-// cada Resource pertenece a una Sede, y los admins/operadores se acotan a una o
-// varias sedes (M2M en User). Modelado para escalar a más lugares.
+// Sede / Lugar físico de la municipalidad. Ej: Complejo Deportivo La Pólvora, Parque Ecológico Florencia.
 @Entity('sedes')
 export class Sede {
   @PrimaryGeneratedColumn('uuid')

@@ -5,8 +5,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 
-// Falla ruidosamente en el arranque si el secreto no está; nunca caer en un
-// fallback inseguro (un secreto público dejaría falsificar cualquier JWT).
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
@@ -30,9 +28,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
   // Forma del payload que firma AuthService (sub = id del usuario).
   async validate(payload: { sub: string }) {
-    // Se cargan las sedes del actor (ADM-1) para acotar el alcance admin/operador.
-    // Va contra la BD en cada request (no en el JWT), así la asignación de sedes
-    // queda fresca aunque el token dure 7 días.
+    // Se cargan las sedes del actor para acotar el alcance admin/operador.
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
       relations: ['sedes'],

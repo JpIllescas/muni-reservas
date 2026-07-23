@@ -1,13 +1,5 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-// REC-2 (escalable): convierte el estado del recurso de un enum fijo a un
-// CATÁLOGO (resource_statuses) con flags de comportamiento. resources.status pasa
-// de enum a varchar con FK -> resource_statuses(key). El comportamiento (¿bloquea
-// reservas?) cuelga del flag blocks_reservations, no del nombre del estado.
-//
-// Escrita a mano (NO migration:generate) para no re-DROPear los backstops.
-// Orden crítico (Postgres no castea el DEFAULT del enum solo): sembrar el catálogo
-// -> DROP DEFAULT -> TYPE varchar -> SET DEFAULT -> FK -> DROP TYPE.
 export class AddResourceStatusCatalog1784300000000 implements MigrationInterface {
   name = 'AddResourceStatusCatalog1784300000000';
 
@@ -37,8 +29,7 @@ export class AddResourceStatusCatalog1784300000000 implements MigrationInterface
       ON "resource_statuses" ("is_default") WHERE "is_default" = true
     `);
 
-    // 2. Semilla: los 3 estados que existían como enum. 'available' es el default
-    //    (espeja el DEFAULT de la columna). maintenance/event bloquean reservas.
+    // 2. Semilla: los 3 estados que existían como enum.
     await queryRunner.query(`
       INSERT INTO "resource_statuses"
         ("key", "label", "blocks_reservations", "visible_in_catalog", "is_default", "color", "sort_order")
@@ -59,22 +50,15 @@ export class AddResourceStatusCatalog1784300000000 implements MigrationInterface
       `ALTER TABLE "resources" ALTER COLUMN "status" SET DEFAULT 'available'`,
     );
 
-    // 4. FK por key (los recursos existentes ya traen 'available'/'maintenance'/
-    //    'event', que están sembrados, así que no viola). Sin ON DELETE/UPDATE:
-    //    RESTRICT por defecto -> no se borra un estado en uso ni se renombra su key.
     await queryRunner.query(`
       ALTER TABLE "resources"
       ADD CONSTRAINT "FK_resources_status"
         FOREIGN KEY ("status") REFERENCES "resource_statuses"("key")
     `);
 
-    // 5. El enum ya no lo usa nadie.
     await queryRunner.query(`DROP TYPE "public"."resources_status_enum"`);
   }
 
-  // NOTA: down() solo revierte limpiamente los 3 estados sembrados. Si un admin
-  // creó una key nueva, el cast de vuelta al enum lanza (valor no permitido).
-  // Limitación aceptada: el rollback es una herramienta de desarrollo.
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       `CREATE TYPE "public"."resources_status_enum" AS ENUM('available', 'maintenance', 'event')`,

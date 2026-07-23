@@ -25,7 +25,7 @@ import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('payments')
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(private readonly paymentsService: PaymentsService) { }
 
   // POST /api/payments/:reservationId/voucher - El ciudadano sube su boleta
   @Post(':reservationId/voucher')
@@ -44,9 +44,6 @@ export class PaymentsController {
     );
   }
 
-  // POST /api/payments/:reservationId/admin-voucher - CR-5: el admin/operador
-  // registra un pago en efectivo hecho en la cancha, subiendo la boleta en
-  // nombre del ciudadano. La reserva pasa a under_review, igual que el flujo normal.
   @Post(':reservationId/admin-voucher')
   @Roles(Role.ADMIN, Role.OPERATOR)
   @UseInterceptors(FileInterceptor('voucher'))

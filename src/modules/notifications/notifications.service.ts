@@ -25,7 +25,7 @@ export class NotificationsService {
 
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-  ) {}
+  ) { }
 
   // 'YYYY-MM-DD' → 'DD/MM/YYYY' SIN pasar por Date: new Date('YYYY-MM-DD') es
   // medianoche UTC y getDate() local (GT = UTC-6) devolvía el día ANTERIOR.
@@ -96,10 +96,7 @@ export class NotificationsService {
     }
   }
 
-  // RES-3: aviso al ciudadano de que la administración propone mover su reserva
-  // a otro horario, con instrucción de entrar al sistema a aceptar o rechazar.
-  // Silencioso si falla (igual que sendReservationStatusEmail): la propuesta ya
-  // quedó persistida y el ciudadano también la ve dentro del sistema.
+  // aviso al ciudadano de que la administración propone mover su reserva
   async sendReassignmentProposalEmail(user: User, reservation: Reservation) {
     try {
       await this.mailerService.sendMail({
@@ -134,14 +131,6 @@ export class NotificationsService {
     }
   }
 
-  // ==========================================================================
-  // CR-2 — Aviso a la administración cuando entra una reserva por autorizar,
-  // por DOS canales: notificación en el sistema (tabla notifications) + correo.
-  // ==========================================================================
-
-  // Destinatarios: admins/operadores ACTIVOS de la sede del recurso (user_sedes)
-  // + super-admins. `excludeUserId` evita auto-notificar al actor (CR-5: el
-  // admin que registró el pago no necesita enterarse de lo que él mismo hizo).
   private async findAdminRecipients(
     sedeId: string,
     excludeUserId?: string,
@@ -163,9 +152,6 @@ export class NotificationsService {
     return query.getMany();
   }
 
-  // Best-effort COMPLETO (mismo criterio que sendReservationStatusEmail): un
-  // fallo aquí jamás debe tumbar la operación que lo disparó (la reserva o el
-  // pago ya están commiteados). Se llama SIEMPRE fuera de la transacción.
   async notifyReservationPendingReview(
     reservation: Reservation,
     resource: Resource,
@@ -184,9 +170,8 @@ export class NotificationsService {
       const time = reservation.startTime
         ? `${this.formatTime(reservation.startTime)} - ${this.formatTime(reservation.endTime!)}`
         : null;
-      const message = `El recurso "${resource.name}" tiene una reserva para el ${date}${
-        time ? ` (${time})` : ' (día completo)'
-      } pendiente de revisión.`;
+      const message = `El recurso "${resource.name}" tiene una reserva para el ${date}${time ? ` (${time})` : ' (día completo)'
+        } pendiente de revisión.`;
 
       // 1) Notificación EN el sistema, una por destinatario.
       const rows = recipients.map((recipient) =>
@@ -200,9 +185,7 @@ export class NotificationsService {
       );
       await this.notificationRepository.save(rows);
 
-      // 2) Correo a cada destinatario (cada envío silencioso por separado:
-      //    un SMTP caído no debe frenar las notificaciones en el sistema,
-      //    que ya quedaron guardadas).
+      // 2) Correo a cada destinatario (cada envío silencioso por separado: un SMTP caído no debe frenar las notificaciones en el sistema, que ya quedaron guardadas).
       for (const recipient of recipients) {
         try {
           await this.mailerService.sendMail({
@@ -236,7 +219,7 @@ export class NotificationsService {
   }
 
   // ==========================================================================
-  // CR-2 — Apartado de notificaciones: cada usuario ve y gestiona las suyas.
+  // Apartado de notificaciones: cada usuario ve y gestiona las suyas.
   // ==========================================================================
 
   async findMyNotifications(userId: string, page = 1, limit = 10) {
@@ -261,8 +244,7 @@ export class NotificationsService {
   }
 
   async markAsRead(id: string, userId: string) {
-    // Se busca por id + dueño: una notificación ajena da el mismo NotFound que
-    // una inexistente (no filtra si el id existe).
+    // Se busca por id + dueño: una notificación ajena da el mismo NotFound que una inexistente (no filtra si el id existe).
     const notification = await this.notificationRepository.findOne({
       where: { id, userId },
     });

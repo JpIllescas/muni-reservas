@@ -1,11 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-// Ventanas de ciclo de vida:
-// - resources.confirmation_window_hours (CR-4): plazo de la 1ª confirmación antes
-//   de que el cron expire una reserva en pending_confirmation.
-// - resources.validation_window_minutes (POL-2): plazo para validar la boleta
-//   antes de que el cron mande un recordatorio a la administración.
-// - reservations.review_reminded_at (POL-2): evita recordatorios repetidos.
+// Ventanas de ciclo de vida
 export class AddLifecycleWindows1784100000000 implements MigrationInterface {
   name = 'AddLifecycleWindows1784100000000';
 

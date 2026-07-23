@@ -30,12 +30,10 @@ export class AuthService {
 
     private readonly jwtService: JwtService,
     private readonly notificationsService: NotificationsService,
-  ) {}
+  ) { }
 
   // Registro de nuevo usuario.
-  // Anti-enumeración (#12): si el correo o el DPI ya existen NO creamos la cuenta,
-  // pero respondemos EXACTAMENTE igual que en un registro exitoso para no revelar
-  // qué cuentas existen.
+  // Si el correo o el DPI ya existen NO creamos la cuenta,
   async register(dto: RegisterDto) {
     const neutralResponse = {
       message: 'Registro exitoso. Revisa tu correo para verificar tu cuenta.',
@@ -49,9 +47,6 @@ export class AuthService {
     const existing = await this.userRepository.findOne({ where: orConditions });
 
     if (existing) {
-      // Igualar el tiempo de respuesta con el camino "usuario nuevo" (que sí
-      // ejecuta bcrypt.hash). Sin esto, la diferencia de latencia revela si el
-      // correo/DPI ya existe, anulando la respuesta neutra anti-enumeración.
       await bcrypt.hash(dto.password, 12);
       return neutralResponse;
     }
@@ -138,8 +133,6 @@ export class AuthService {
   }
 
   // Helper: valida el OTP activo del usuario para un propósito, con lockout.
-  // Busca por (usuario, propósito) — NO por código — para poder contar intentos
-  // fallidos sobre el mismo OTP y quemarlo tras MAX_OTP_ATTEMPTS (anti fuerza bruta).
   private async validateOtp(userId: string, code: string, purpose: OtpPurpose) {
     const otp = await this.otpRepository.findOne({
       where: { userId, purpose, used: false },
@@ -231,7 +224,7 @@ export class AuthService {
     };
   }
 
-  // Solicita el reset: siempre responde neutro (no revela si el correo existe)
+  // Solicita el reset: siempre responde neutro.
   async forgotPassword(dto: ForgotPasswordDto) {
     const user = await this.userRepository.findOne({
       where: { email: dto.email },
@@ -273,9 +266,7 @@ export class AuthService {
       { used: true },
     );
 
-    // Generar código de 6 dígitos. Usamos el rango completo [0, 1000000) y
-    // rellenamos con ceros a la izquierda: así "001234" también es válido y el
-    // espacio de búsqueda es el millón completo (no 900k).
+    // Generar código de 6 dígitos.
     const code = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
 
     // En desarrollo logueamos el OTP para poder probar sin depender del correo

@@ -33,7 +33,7 @@ export class CreateReservationDto {
   })
   endTime?: string;
 
-  // RES-2: contacto del encargado de la reserva. Obligatorio para toda reserva.
+  // contacto del encargado de la reserva. Obligatorio para toda reserva.
   @IsNotEmpty()
   @IsString()
   contactName: string;

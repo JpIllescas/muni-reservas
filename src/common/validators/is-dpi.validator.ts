@@ -23,7 +23,7 @@ export class IsDPIConstraint implements ValidatorConstraintInterface {
     // Guatemala tiene 22 departamentos
     if (departamento === 0 || departamento > 22) return false;
 
-    // Validación Algoritmo Módulo 11 oficial de Guatemala.
+    // Validación Algoritmo Módulo 11 de Guatemala.
     // Los 8 dígitos del correlativo se multiplican por pesos ASCENDENTES
     // (2, 3, 4, ..., 9): el primer dígito por 2 y el octavo por 9.
     let suma = 0;

@@ -8,7 +8,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { promises as fs } from 'fs';
 import { resolve, sep } from 'path';
+import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
+import { CreateUserDto } from './dto/create-user.dto';
+import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { UploadDpiDto } from './dto/upload-dpi.dto';
@@ -30,7 +33,7 @@ export class UsersService {
     private readonly userRepository: Repository<User>,
 
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   // Obtener todos los usuarios — solo admin
   async findAll() {
@@ -49,8 +52,146 @@ export class UsersService {
     });
   }
 
-  // Búsqueda para "crear reserva a nombre de" (B4): admin U operador. Devuelve
-  // solo lo necesario para identificar al ciudadano (sin rutas de archivos).
+  // Alta directa de una cuenta administrativa (admin/operador) por el super-admin.
+  async createByAdmin(
+    dto: CreateUserDto,
+    performedById: string,
+    ipAddress?: string,
+  ) {
+    // Esta pantalla es solo para cuentas administrativas: el ciudadano se autogestiona por el registro público.
+    if (dto.role !== Role.ADMIN && dto.role !== Role.OPERATOR) {
+      throw new BadRequestException(
+        'Solo se pueden crear cuentas de administrador u operador desde aquí.',
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 12);
+
+    const user = this.userRepository.create({
+      fullName: dto.fullName,
+      email: dto.email,
+      phone: dto.phone,
+      password: hashedPassword,
+      role: dto.role,
+      // Creada por un admin: se salta la verificación por correo (OTP).
+      isEmailVerified: true,
+      isActive: true,
+    });
+
+    let saved: User;
+    try {
+      saved = await this.userRepository.save(user);
+    } catch (err) {
+      // Unique de email (o dpi): a diferencia del registro público, aquí sí se informa el conflicto (endpoint admin, no hay riesgo de enumeración).
+      const pgCode =
+        (err as { code?: string }).code ??
+        (err as { driverError?: { code?: string } }).driverError?.code;
+      if (pgCode === '23505') {
+        throw new BadRequestException('Ese correo ya está registrado.');
+      }
+      throw err;
+    }
+
+    await this.auditService.createLog(
+      'User',
+      'CREATE',
+      performedById,
+      saved.id,
+      undefined,
+      { email: saved.email, fullName: saved.fullName, role: saved.role },
+      ipAddress,
+    );
+
+    // No devolver el hash: replicar la forma de findAll (select whitelist).
+    return {
+      id: saved.id,
+      fullName: saved.fullName,
+      email: saved.email,
+      dpi: saved.dpi,
+      phone: saved.phone,
+      role: saved.role,
+      isActive: saved.isActive,
+      createdAt: saved.createdAt,
+    };
+  }
+
+  // Edición de una cuenta administrativa (admin/operador) por el super-admin.
+  async updateByAdmin(
+    id: string,
+    dto: AdminUpdateUserDto,
+    performedById: string,
+    ipAddress?: string,
+  ) {
+    const user = await this.findOne(id);
+
+    // Solo cuentas administrativas: el ciudadano se autogestiona (mismo criterio
+    // que createByAdmin).
+    if (user.role !== Role.ADMIN && user.role !== Role.OPERATOR) {
+      throw new BadRequestException(
+        'Solo se pueden editar cuentas de administrador u operador desde aquí.',
+      );
+    }
+
+    // Valores previos para la bitácora (sin el hash de contraseña).
+    const before = {
+      fullName: user.fullName,
+      email: user.email,
+      phone: user.phone,
+    };
+
+    if (dto.fullName !== undefined) user.fullName = dto.fullName;
+    if (dto.email !== undefined) user.email = dto.email;
+    if (dto.phone !== undefined) user.phone = dto.phone;
+
+    const passwordChanged = dto.password !== undefined;
+    if (passwordChanged) {
+      user.password = await bcrypt.hash(dto.password!, 12);
+    }
+
+    let saved: User;
+    try {
+      saved = await this.userRepository.save(user);
+    } catch (err) {
+      // Unique de email: el nuevo correo ya lo usa otra cuenta.
+      const pgCode =
+        (err as { code?: string }).code ??
+        (err as { driverError?: { code?: string } }).driverError?.code;
+      if (pgCode === '23505') {
+        throw new BadRequestException('Ese correo ya está registrado.');
+      }
+      throw err;
+    }
+
+    await this.auditService.createLog(
+      'User',
+      'UPDATE',
+      performedById,
+      saved.id,
+      before,
+      {
+        fullName: saved.fullName,
+        email: saved.email,
+        phone: saved.phone,
+        // Nunca se registra la contraseña: solo si hubo reseteo.
+        passwordChanged,
+      },
+      ipAddress,
+    );
+
+    // No devolver el hash: replicar la forma de findAll (select whitelist).
+    return {
+      id: saved.id,
+      fullName: saved.fullName,
+      email: saved.email,
+      dpi: saved.dpi,
+      phone: saved.phone,
+      role: saved.role,
+      isActive: saved.isActive,
+      createdAt: saved.createdAt,
+    };
+  }
+
+  // Búsqueda para "crear reserva a nombre de": admin U operador. Devuelve solo lo necesario para identificar al ciudadano (sin rutas de archivos).
   async search(query: string) {
     const q = query.trim();
     if (q.length < 2) {
@@ -102,8 +243,7 @@ export class UsersService {
     if (dto.fullName !== undefined) user.fullName = dto.fullName;
     if (dto.phone !== undefined) user.phone = dto.phone;
 
-    // DPI de una sola escritura: solo se acepta si aún está vacío. Ya fijado es
-    // inmutable (identidad), aunque manden el mismo valor.
+    // DPI de una sola escritura: solo se acepta si aún está vacío. Ya fijado es inmutable (identidad), aunque manden el mismo valor.
     if (dto.dpi !== undefined) {
       if (user.dpi) {
         throw new BadRequestException(
@@ -128,14 +268,9 @@ export class UsersService {
   }
 
   // ==========================================================================
-  // CR-1 — DPI con fotos (frente y reverso), caso "no vecino antigüeño".
+  // DPI con fotos (frente y reverso), caso "no vecino antigüeño".
   // ==========================================================================
 
-  // El usuario sube (o re-sube) las DOS fotos de su DPI desde el perfil. El
-  // número sigue la regla USR-1 (inmutable una vez fijado: si ya existe, NO se
-  // manda); las fotos sí se pueden reemplazar (foto borrosa) y las anteriores
-  // se borran del disco. Al terminar, el usuario debe quedar con número + 2
-  // fotos: el requisito que ReservationsService.create() exige para reservar.
   async uploadDpi(
     userId: string,
     files: DpiFiles,
@@ -175,8 +310,7 @@ export class UsersService {
       throw new NotFoundException('Usuario no encontrado.');
     }
 
-    // Número: misma regla que updateProfile (USR-1). Si ya está fijado no se
-    // acepta el campo (ni con el mismo valor); si falta, tiene que venir aquí.
+    // Número: misma regla que updateProfile. Si ya está fijado no se acepta el campo (ni con el mismo valor); si falta, tiene que venir aquí.
     if (dto.dpi !== undefined) {
       if (user.dpi) {
         await cleanup();
@@ -212,8 +346,6 @@ export class UsersService {
       throw err;
     }
 
-    // Re-subida: las fotos anteriores ya no se referencian → fuera del disco
-    // (best-effort, el registro nuevo ya está commiteado).
     if (oldFront && oldFront !== front.path) {
       await fs.unlink(oldFront).catch(() => undefined);
     }
@@ -240,10 +372,7 @@ export class UsersService {
     };
   }
 
-  // Devuelve la ruta física + content-type de una foto del DPI, ya autorizada:
-  // el dueño ve la suya; admin/operador cualquiera (verificación de vecindad).
-  // El acceso AJENO queda en la bitácora (VIEW_DPI): es un documento de
-  // identidad y la consulta misma debe ser fiscalizable.
+  // Devuelve la ruta física + content-type de una foto del DPI, ya autorizada
   async getDpiFile(
     targetUserId: string,
     side: 'front' | 'back',
@@ -296,8 +425,7 @@ export class UsersService {
           ? 'image/jpeg'
           : 'application/octet-stream';
 
-    // Bitácora de LECTURA sensible: solo cuando alguien consulta un DPI ajeno
-    // (el dueño viendo el suyo no es fiscalizable). Best-effort como el resto.
+    // Bitácora de LECTURA sensible: solo cuando alguien consulta un DPI ajeno (el dueño viendo el suyo no es fiscalizable).
     if (requester.id !== targetUserId) {
       await this.auditService.createLog(
         'User',

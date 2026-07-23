@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-// POL-1: la ventana de pago de canchas pasa de 24h a 2h (default de negocio).
-// Se baja el default de la columna y se actualizan las canchas que aún tenían
-// el default viejo (24), sin tocar canchas con una ventana personalizada.
+// la ventana de pago de canchas pasa de 24h a 2h
 export class CourtPaymentWindow2h1784000000000 implements MigrationInterface {
   name = 'CourtPaymentWindow2h1784000000000';
 

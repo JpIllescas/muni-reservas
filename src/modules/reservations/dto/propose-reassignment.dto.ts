@@ -6,7 +6,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 
-// RES-3: el admin/operador propone un nuevo slot para una reserva
+// el admin/operador propone un nuevo slot para una reserva
 export class ProposeReassignmentDto {
   @IsNotEmpty()
   @IsString()
@@ -29,7 +29,7 @@ export class ProposeReassignmentDto {
   })
   proposedEndTime?: string;
 
-  // CR-6: motivo del cambio; obligatorio, se muestra al ciudadano y va en el email.
+  // motivo del cambio; obligatorio, se muestra al ciudadano y va en el email.
   @IsNotEmpty()
   @IsString()
   @MaxLength(300)

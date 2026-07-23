@@ -11,7 +11,7 @@ import { User } from '../users/entities/user.entity';
 
 @Module({
   imports: [
-    // CR-2: Notification para el apartado en el sistema; User para resolver
+    // Notification para el apartado en el sistema; User para resolver
     // los destinatarios admin/operador por sede.
     TypeOrmModule.forFeature([Notification, User]),
 

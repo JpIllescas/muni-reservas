@@ -6,8 +6,7 @@ import {
   Matches,
 } from 'class-validator';
 
-// REC-3: crea un horario especial para una fecha concreta. openTime < closeTime se
-// valida en el service (comparación entre campos). slotDurationMin opcional (canchas).
+// crea un horario especial para una fecha concreta. openTime < closeTime se valida en el service (comparación entre campos). slotDurationMin opcional (canchas).
 export class CreateScheduleOverrideDto {
   @IsNotEmpty()
   @IsString()

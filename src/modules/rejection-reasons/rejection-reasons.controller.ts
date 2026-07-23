@@ -23,10 +23,9 @@ import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('rejection-reasons')
 export class RejectionReasonsController {
-  constructor(private readonly service: RejectionReasonsService) {}
+  constructor(private readonly service: RejectionReasonsService) { }
 
-  // GET /api/rejection-reasons?all=true — admin y operador (para el desplegable
-  // al rechazar). all=true (solo admin lo usa) incluye inactivos para gestión.
+  // GET /api/rejection-reasons?all=true — admin y operador 
   @Get()
   @Roles(Role.ADMIN, Role.OPERATOR)
   findAll(@Query('all') all?: string) {

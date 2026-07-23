@@ -6,10 +6,7 @@ export class UpdateUserDto {
   @IsString()
   fullName: string;
 
-  // DPI de UNA sola escritura (USR-1 + follow-up): el registro lo deja opcional,
-  // así que se permite ESTABLECERLO aquí si aún está vacío (FEL/CGC lo van a
-  // necesitar para recibos). Una vez fijado es inmutable: el servicio rechaza
-  // cualquier cambio, aunque venga el mismo valor.
+  // DPI de UNA sola escritura (USR-1 + follow-up): el registro lo deja opcional, así que se permite ESTABLECERLO aquí si aún está vacío 
   @IsOptional()
   @IsString()
   @IsDPI()

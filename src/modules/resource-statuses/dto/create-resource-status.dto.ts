@@ -11,8 +11,7 @@ import {
 } from 'class-validator';
 
 export class CreateResourceStatusDto {
-  // Slug estable e inmutable. Solo minúsculas, números y guiones (se valida aquí
-  // para que la entrada del admin no genere una key basura). Es el destino del FK.
+  // Slug estable e inmutable. Solo minúsculas, números y guiones (se valida aquí para que la entrada del admin no genere una key basura). Es el destino del FK.
   @IsNotEmpty()
   @IsString()
   @MaxLength(40)

@@ -49,17 +49,14 @@ export class ReservationsService {
       ReservationStatus.REJECTED,
     ],
     [ReservationStatus.PENDING_PAYMENT]: [ReservationStatus.REJECTED],
-    // CR-4: primera confirmación de la administración. Aceptar → pending_payment
-    // (ahí arranca la ventana de pago); anular → rejected.
+    // Primera confirmación de la administración. Aceptar -> pending_payment
     [ReservationStatus.PENDING_CONFIRMATION]: [
       ReservationStatus.PENDING_PAYMENT,
       ReservationStatus.REJECTED,
     ],
   };
 
-  // RES-3: estados desde los que se puede PROPONER/ACEPTAR una reasignación.
-  // Activos (se mueven conservando estado) + rejected (revive al nuevo slot,
-  // fallback del breadcrumb de RES-1). Se excluyen expired y cancelled.
+  // Estados desde los que se puede proponer/aceptar una reasignación
   private readonly reassignableStatuses: ReservationStatus[] = [
     ReservationStatus.PENDING_CONFIRMATION,
     ReservationStatus.PENDING_PAYMENT,
@@ -68,12 +65,10 @@ export class ReservationsService {
     ReservationStatus.REJECTED,
   ];
 
-  // FLO-2: estados en los que el descuento aún puede cambiar: mientras el pago
-  // no está resuelto. Tras aprobar (o rechazar/expirar/cancelar) el monto queda
-  // congelado tal como se revisó.
+  // Estados donde el descuento aún puede cambiar (mientras el pago no está resuelto). Tras aprobar/rechazar/expirar/cancelar, el monto queda congelado.
   private readonly discountableStatuses: ReservationStatus[] = [
-    // CR-4: también antes de aceptar (el admin revisa el DPI y ajusta la
-    // tarifa de no-vecino ANTES de dar la primera confirmación).
+    // También antes de aceptar: el admin revisa el DPI y ajusta la tarifa de
+    // no-vecino antes de la primera confirmación.
     ReservationStatus.PENDING_CONFIRMATION,
     ReservationStatus.PENDING_PAYMENT,
     ReservationStatus.UNDER_REVIEW,
@@ -93,26 +88,21 @@ export class ReservationsService {
     private readonly rejectionReasonsService: RejectionReasonsService,
 
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
-  // ADM-2 (B4): `actor` presente ⇒ la reserva la crea un admin/operador a nombre
-  // de un ciudadano existente (`userId` es el ciudadano, no el actor). Se valida
-  // la sede del actor y se audita. Sin `actor` es el flujo normal del ciudadano.
+  // Con `actor`, un admin/operador crea la reserva a nombre de un ciudadano
   async create(
     userId: string,
     dto: CreateReservationDto,
     actor?: AuthUser,
     ipAddress?: string,
   ) {
-    // CR-2: referencia al recurso para el aviso post-commit (se asigna dentro
-    // de la transacción, se usa después de que TODO quedó persistido).
+    // Recurso para el aviso post-commit
     let notifyResource: Resource | null = null;
 
     // Envolvemos TODO en una transacción ACID
     const saved = await this.dataSource.transaction(async (manager) => {
-      // CR-1: reservar exige identidad completa: número de DPI + las dos fotos
-      // (frente y reverso), registrados desde el perfil. Se chequea ANTES del
-      // lock del recurso para no serializar a quien igual va a ser rechazado.
+      // reservar exige identidad completa: número de DPI + las dos fotos
       const reservingUser = await manager.findOne(User, {
         where: { id: userId },
       });
@@ -131,8 +121,7 @@ export class ReservationsService {
         );
       }
 
-      // BLOQUEO PESIMISTA: Si dos personas intentan reservar ESTE recurso al mismo tiempo,
-      // la base de datos hará que el segundo espere a que el primero termine.
+      // BLOQUEO PESIMISTA: Si dos personas intentan reservar ESTE recurso al mismo tiempo, la base de datos hará que el segundo espere a que el primero termine.
       const resource = await manager.findOne(Resource, {
         where: { id: dto.resourceId, isActive: true },
         lock: { mode: 'pessimistic_write' },
@@ -142,15 +131,12 @@ export class ReservationsService {
         throw new NotFoundException('Recurso no encontrado o inactivo.');
       }
 
-      // ADM-2 (B4): el admin/operador solo crea en recursos de sus sedes.
+      // el admin/operador solo crea en recursos de sus sedes.
       if (actor && !actor.isSuperAdmin) {
         assertSedeAccess(actor, resource.sedeId);
       }
 
-      // REC-2: el recurso puede estar activo pero en un estado que bloquea
-      // reservas (mantenimiento/evento/…). El fetch filtra por isActive, no por
-      // status; el bloqueo cuelga del flag del catálogo, no del nombre. Se carga
-      // por separado (sin JOIN) para no romper el bloqueo pesimista de arriba.
+      // el recurso puede estar activo pero en un estado que bloquea reservas (mantenimiento/evento/…).
       const statusRow = await manager.findOne(ResourceStatusEntity, {
         where: { key: resource.status },
       });
@@ -162,9 +148,7 @@ export class ReservationsService {
         );
       }
 
-      // Gate de sede: una sede inactiva oculta sus recursos y no acepta reservas
-      // NUEVAS, sin cascada sobre el isActive de los recursos (al reactivar la
-      // sede vuelven solos). Mismo mensaje que recurso inactivo (no filtra info).
+      // Gate de sede: una sede inactiva oculta sus recursos y no acepta reservas nuevas
       const sede = await manager.findOne(Sede, {
         where: { id: resource.sedeId },
       });
@@ -209,8 +193,7 @@ export class ReservationsService {
         );
       }
 
-      // Horario EFECTIVO del día: override por fecha (REC-3) > semanal. Si la
-      // fecha estaba bloqueada, ya se cortó arriba (el bloqueo tiene precedencia).
+      // Horario EFECTIVO del día: override por fecha > semanal. Si la fecha estaba bloqueada, ya se cortó arriba (el bloqueo tiene precedencia).
       const schedule = await resolveEffectiveSchedule(
         manager,
         dto.resourceId,
@@ -227,8 +210,7 @@ export class ReservationsService {
           );
         }
 
-        // Comparamos por minutos (no con new Date): así "9:00" (una cifra,
-        // permitido por el regex del DTO) se evalúa bien y no da NaN.
+        // Comparamos por minutos (no con new Date): así "9:00"
         if (hhmmToMinutes(dto.startTime) >= hhmmToMinutes(dto.endTime)) {
           throw new BadRequestException(
             'La hora de inicio debe ser estrictamente anterior a la hora de fin.',
@@ -312,11 +294,7 @@ export class ReservationsService {
         }
       }
 
-      // CR-4: una cancha con boleta nace "pendiente de aceptar" — el admin da
-      // la PRIMERA confirmación. La ventana de pago NO corre aquí: arranca
-      // cuando el admin acepta (updateStatus pone el deadline al pasar a
-      // pending_payment). Ranchos y recursos sin boleta nacen pending_payment
-      // sin deadline, igual que antes (FLO-1: pagan al llegar / por llamada).
+      // una cancha con boleta nace "pendiente de aceptar" — el admin da la PRIMERA confirmación.
       const needsPreConfirmation =
         resource.type === ResourceType.COURT && resource.requiresVoucher;
       const initialStatus = needsPreConfirmation
@@ -365,11 +343,7 @@ export class ReservationsService {
       return saved;
     });
 
-    // CR-2/CR-4: aviso a los admins de la sede cuando la reserva nace
-    // necesitando acción de la administración: sin boleta (FLO-1, por llamada)
-    // o pendiente de la primera confirmación (CR-4). Un rancho con boleta nace
-    // esperando al CIUDADANO → avisa recién en uploadVoucher. FUERA de la
-    // transacción y best-effort: un fallo aquí no toca la reserva.
+    // aviso a los admins de la sede cuando la reserva nace
     if (
       notifyResource &&
       (!(notifyResource as Resource).requiresVoucher ||
@@ -378,11 +352,11 @@ export class ReservationsService {
       await this.notificationsService.notifyReservationPendingReview(
         saved,
         notifyResource,
-        actor?.id, // B4: si la creó un admin, no auto-notificarlo
+        actor?.id, // si la creó un admin, no auto-notificarlo
       );
     }
 
-    // ADM-2 (B4): rastro de la reserva creada por la administración a nombre de
+    // rastro de la reserva creada por la administración a nombre de
     // un ciudadano. El create normal del ciudadano no se audita (es su propia acción).
     if (actor) {
       await this.auditService.createLog(
@@ -403,8 +377,7 @@ export class ReservationsService {
     return saved;
   }
 
-  // El ciudadano ve sus propias reservas. voucherCount indica si tiene boleta
-  // adjunta (para el botón "Ver boleta" del frontend).
+  // El ciudadano ve sus propias reservas. voucherCount indica si tiene boleta adjunta
   async findMyReservations(userId: string) {
     return this.reservationRepository
       .createQueryBuilder('r')
@@ -417,7 +390,7 @@ export class ReservationsService {
       .getMany();
   }
 
-  // Admin y operador ven las reservas de SUS sedes (ADM-1). El super-admin ve todas.
+  // Admin y operador ven las reservas de SUS sedes. El super-admin ve todas.
   async findAll(
     user: AuthUser,
     status?: ReservationStatus,
@@ -491,7 +464,7 @@ export class ReservationsService {
         );
       }
     } else {
-      // Admin/operador: solo reservas de recursos de sus sedes (ADM-1).
+      // Admin/operador: solo reservas de recursos de sus sedes.
       assertSedeAccess(user, reservation.resource.sedeId);
     }
 
@@ -508,8 +481,6 @@ export class ReservationsService {
     const changedById = user.id;
 
     // Rechazo: resolver el texto que verá el ciudadano y el motivo del catálogo
-    // ANTES de mutar. Se acepta un motivo del catálogo (rejectionReasonId), texto
-    // libre (reason), o ambos (el texto libre queda como nota). Al menos uno.
     let rejectionText: string | null = null;
     let rejectionReasonId: string | null = null;
     if (dto.status === ReservationStatus.REJECTED) {
@@ -542,29 +513,23 @@ export class ReservationsService {
           throw new NotFoundException('Reserva no encontrada.');
         }
 
-        // Se carga el recurso siempre: para el chequeo de sede (ADM-1) y para
-        // saber si exige boleta (FLO-1). La FK garantiza que existe.
+        // Se carga el recurso siempre: para el chequeo de sede y para saber si exige boleta
         const resource = await manager.findOne(Resource, {
           where: { id: found.resourceId },
         });
 
-        // Admin/operador solo gestiona reservas de recursos de sus sedes (ADM-1).
+        // Admin/operador solo gestiona reservas de recursos de sus sedes.
         if (!user.isSuperAdmin) {
           assertSedeAccess(user, resource!.sedeId);
         }
 
         const fromStatus = found.status;
 
-        // Reserva EXONERADA (totalAmount = 0, ej. colegio/municipalidad vía
-        // "editar precio" con motivo): no hay pago que exigir ni boleta que
-        // registrar; se aprueba directo y el rastro queda en el ajuste de
-        // precio (discountReason) + logs.
+        // Reserva EXONERADA (totalAmount = 0, ej. colegio/municipalidad vía "editar precio" con motivo): no hay pago que exigir ni boleta.
         const exonerated = found.totalAmount === 0;
 
         // 1. Validar la transición contra la máquina de estados.
-        //    FLO-1: un recurso de confirmación por llamada (requiresVoucher=false)
-        //    puede aprobarse directo desde pending_payment, sin pasar por revisión.
-        //    Una exonerada también (no va a llegar ninguna boleta).
+        // un recurso de confirmación por llamada (requiresVoucher=false) puede aprobarse directo desde pending_payment, sin pasar por revisión.
         const allowed = this.allowedTransitions[fromStatus] ?? [];
         const approveWithoutVoucher =
           (!resource!.requiresVoucher || exonerated) &&
@@ -577,8 +542,7 @@ export class ReservationsService {
           );
         }
 
-        // 2. Aprobar exige un pago registrado SOLO si el recurso pide boleta
-        //    (FLO-1) y la reserva no está exonerada.
+        // 2. Aprobar exige un pago registrado SOLO si el recurso pide boleta y la reserva no está exonerada.
         if (
           dto.status === ReservationStatus.APPROVED &&
           resource!.requiresVoucher &&
@@ -594,10 +558,7 @@ export class ReservationsService {
           }
         }
 
-        // 2b. CR-7: aprobar un recurso SIN comprobante exige el número de la
-        // boleta física (pagan en efectivo al llegar) y deja un Payment cash
-        // aprobado en la misma transacción: constancia fiscalizable en vez de
-        // la aprobación "al aire" que permitía FLO-1. Una exonerada no paga
+        // 2b. aprobar un recurso SIN comprobante exige el número de la boleta física (pagan en efectivo al llegar)
         // nada → sin boleta ni Payment.
         if (approveWithoutVoucher && !exonerated) {
           if (!dto.receiptNumber) {
@@ -627,9 +588,7 @@ export class ReservationsService {
           found.rejectionReason = rejectionText;
           found.rejectionReasonId = rejectionReasonId;
         }
-        // CR-4: primera confirmación (aceptar). La ventana de pago arranca
-        // AQUÍ, no al crear: así el plazo no se quema esperando al admin.
-        // Una exonerada no espera boleta → sin deadline (el cron no la expira).
+        // primera confirmación (aceptar). La ventana de pago arranca
         if (
           fromStatus === ReservationStatus.PENDING_CONFIRMATION &&
           dto.status === ReservationStatus.PENDING_PAYMENT &&
@@ -685,13 +644,7 @@ export class ReservationsService {
     return reservation;
   }
 
-  // CR-3: el admin fija el PRECIO FINAL de una reserva puntual (carta/acuerdo
-  // que no encaja como descuento simple, o un ajuste hacia arriba). Se apoya en
-  // las MISMAS columnas de FLO-2: discountAmount = original − nuevo precio
-  // (negativo si el precio sube), así el monto original nunca se pierde y las
-  // dos vías (descuento y precio) son consistentes entre sí. totalAmount sigue
-  // siendo SIEMPRE el monto final a pagar (ARQ-1). Misma ventana y candado que
-  // solo mientras el pago no está resuelto.
+  // el admin fija el PRECIO FINAL de una reserva puntual
   async setPrice(
     id: string,
     dto: SetPriceDto,
@@ -711,7 +664,7 @@ export class ReservationsService {
           throw new NotFoundException('Reserva no encontrada.');
         }
 
-        // ADM-1: solo reservas de recursos de las sedes del actor.
+        // solo reservas de recursos de las sedes del actor.
         const resource = await manager.findOne(Resource, {
           where: { id: found.resourceId },
         });
@@ -725,8 +678,7 @@ export class ReservationsService {
           );
         }
 
-        // Monto original (sin ajuste vigente): el precio nuevo se fija SIEMPRE
-        // respecto al original, no sobre un ajuste previo.
+        // Monto original (sin ajuste vigente)
         const original = round2(
           found.totalAmount + (found.discountAmount ?? 0),
         );
@@ -758,9 +710,7 @@ export class ReservationsService {
           found.totalAmount = round2(dto.newTotal);
         }
 
-        // Exoneración vs. ventana de pago (canchas con boleta): a Q0 se quita
-        // el deadline (no espera boleta, el cron no debe expirarla); si vuelve
-        // a ser > 0 en pending_payment, se abre una ventana fresca.
+        // Exoneración vs. ventana de pago
         if (
           found.status === ReservationStatus.PENDING_PAYMENT &&
           resource!.type === ResourceType.COURT &&
@@ -800,10 +750,7 @@ export class ReservationsService {
     return reservation;
   }
 
-  // RES-1: el admin revierte un rechazo hecho por error, SOLO si el horario
-  // original sigue libre. Si ya fue tomado, se rechaza y queda para la
-  // reasignación con aprobación del ciudadano (RES-3, futuro). Restaura el estado
-  // que la reserva tenía ANTES del rechazo (leído del log). Acción de admin.
+  // el admin revierte un rechazo hecho por error, SOLO si el horario original sigue libre. Si ya fue tomado, se rechaza y queda para la reasignación con aprobación del ciudadano
   async revertRejection(id: string, user: AuthUser, ipAddress?: string) {
     const { reservation, toStatus } = await this.dataSource.transaction(
       async (manager) => {
@@ -820,8 +767,7 @@ export class ReservationsService {
           );
         }
 
-        // Candado pesimista sobre el recurso: serializa contra creates concurrentes
-        // del mismo slot (igual que create()).
+        // Candado pesimista sobre el recurso
         const resource = await manager.findOne(Resource, {
           where: { id: found.resourceId },
           lock: { mode: 'pessimistic_write' },
@@ -830,13 +776,12 @@ export class ReservationsService {
           throw new NotFoundException('Recurso no encontrado.');
         }
 
-        // Admin/operador solo gestiona reservas de recursos de sus sedes (ADM-1).
+        // Admin/operador solo gestiona reservas de recursos de sus sedes.
         if (!user.isSuperAdmin) {
           assertSedeAccess(user, resource.sedeId);
         }
 
-        // El recurso debe poder recibir reservas (activo y en un estado que no
-        // bloquea, según el catálogo).
+        // El recurso debe poder recibir reservas (activo y en un estado que no bloquea, según el catálogo).
         const statusRow = await manager.findOne(ResourceStatusEntity, {
           where: { key: resource.status },
         });
@@ -867,8 +812,7 @@ export class ReservationsService {
           );
         }
 
-        // Horario EFECTIVO del día (override REC-3 > semanal); pudo cambiar tras
-        // el rechazo. El bloqueo por excepción ya se validó arriba (mayor precedencia).
+        // Horario EFECTIVO del día (override REC-3 > semanal); pudo cambiar tras el rechazo.
         const schedule = await resolveEffectiveSchedule(
           manager,
           found.resourceId,
@@ -878,8 +822,7 @@ export class ReservationsService {
           throw new BadRequestException('El recurso ya no atiende ese día.');
         }
 
-        // El slot debe seguir libre. Self está REJECTED (inactivo) → no aparece
-        // en estas consultas, no hace falta excluirlo explícitamente.
+        // El slot debe seguir libre.
         if (resource.type === ResourceType.COURT) {
           await manager.query(
             'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
@@ -940,8 +883,7 @@ export class ReservationsService {
           }
         }
 
-        // Estado destino = el que tenía justo antes del rechazo (del log). El
-        // único origen válido de un rechazo es UNDER_REVIEW o PENDING_PAYMENT.
+        // Estado destino = el que tenía justo antes del rechazo (del log).
         const rejectLog = await manager.findOne(ReservationLog, {
           where: { reservationId: id, toStatus: ReservationStatus.REJECTED },
           order: { createdAt: 'DESC' },
@@ -957,8 +899,7 @@ export class ReservationsService {
 
         found.status = toStatus;
         found.rejectionReason = null;
-        // Si vuelve a pending_payment y el recurso cobra por hora con boleta, se
-        // le da una ventana de pago FRESCA (si no, el cron lo re-expira al toque).
+        // Si vuelve a pending_payment y el recurso cobra por hora con boleta, se le da una ventana de pago FRESCA
         if (
           toStatus === ReservationStatus.PENDING_PAYMENT &&
           resource.type === ResourceType.COURT &&
@@ -1012,12 +953,9 @@ export class ReservationsService {
   }
 
   // ==========================================================================
-  // RES-3 — Reasignación de horario con aprobación del ciudadano (Shape B).
+  // Reasignación de horario con aprobación del ciudadano.
   // ==========================================================================
 
-  // El admin/operador PROPONE un nuevo slot. NO valida disponibilidad ni ocupa
-  // el horario (Shape B pto 2): solo lo aparta en proposed_*. Sobrescribe una
-  // propuesta previa (una sola propuesta viva).
   async proposeReassignment(
     id: string,
     dto: ProposeReassignmentDto,
@@ -1032,7 +970,7 @@ export class ReservationsService {
       throw new NotFoundException('Reserva no encontrada.');
     }
 
-    // Gating de sede (ADM-1): admin/operador solo sobre recursos de sus sedes.
+    // Gating de sede admin/operador solo sobre recursos de sus sedes.
     if (!user.isSuperAdmin) {
       assertSedeAccess(user, reservation.resource.sedeId);
     }
@@ -1096,7 +1034,6 @@ export class ReservationsService {
     );
 
     // Aviso al ciudadano FUERA de la persistencia; silencioso si el SMTP falla
-    // (la propuesta ya quedó guardada y también se ve dentro del sistema).
     if (reservation.user) {
       await this.notificationsService.sendReassignmentProposalEmail(
         reservation.user,
@@ -1107,9 +1044,7 @@ export class ReservationsService {
     return reservation;
   }
 
-  // El ciudadano dueño ACEPTA: mueve la reserva al slot propuesto. Todo en una
-  // transacción con pessimistic_write + advisory lock; el backstop de BD
-  // (23P01 / 23505) es la red final si el slot se ocupó en carrera.
+  // El ciudadano dueño ACEPTA: mueve la reserva al slot propuesto.
   async acceptReassignment(id: string, user: AuthUser, ipAddress?: string) {
     const { reservation, fromStatus, toStatus } =
       await this.dataSource.transaction(async (manager) => {
@@ -1159,8 +1094,7 @@ export class ReservationsService {
           throw new BadRequestException('La fecha propuesta ya pasó.');
         }
 
-        // Gating de disponibilidad del slot propuesto (EXCLUYE la propia reserva:
-        // en la rama activa aún ocupa su slot viejo y no debe chocar consigo misma).
+        // Gating de disponibilidad del slot propuesto
         await this.assertSlotAvailable(
           manager,
           resource,
@@ -1180,8 +1114,7 @@ export class ReservationsService {
         found.endTime =
           resource.type === ResourceType.COURT ? found.proposedEndTime : null;
 
-        // Estado destino: rama activa conserva; rama revivir (rejected) restaura
-        // el estado previo al rechazo (del log) + ventana de pago fresca.
+        // Estado destino: rama activa conserva; rama revivir (rejected) restaura el estado previo al rechazo + ventana de pago fresca.
         let toStatus = fromStatus;
         if (fromStatus === ReservationStatus.REJECTED) {
           const rejectLog = await manager.findOne(ReservationLog, {
@@ -1251,8 +1184,7 @@ export class ReservationsService {
     return reservation;
   }
 
-  // El ciudadano dueño RECHAZA la propuesta: limpia proposed_*; la reserva
-  // queda intacta (mismo slot y estado). No toca columnas reales → sin backstop.
+  // El ciudadano dueño RECHAZA la propuesta
   async rejectReassignment(id: string, user: AuthUser, ipAddress?: string) {
     const reservation = await this.reservationRepository.findOne({
       where: { id },
@@ -1290,9 +1222,7 @@ export class ReservationsService {
     return { message: 'Propuesta de reasignación rechazada.' };
   }
 
-  // Gating de disponibilidad compartido (RES-3). Lanza BadRequest si el slot no
-  // está libre; no devuelve nada si está disponible. `excludeReservationId` evita
-  // que una reserva que se mueve choque consigo misma en solape/límite diario.
+  // Gating de disponibilidad compartido. Lanza BadRequest si el slot no está libre; no devuelve nada si está disponible.
   private async assertSlotAvailable(
     manager: EntityManager,
     resource: Resource,
@@ -1312,7 +1242,7 @@ export class ReservationsService {
       );
     }
 
-    // Horario EFECTIVO del día: override por fecha (REC-3) > semanal.
+    // Horario EFECTIVO del día: override por fecha > semanal.
     const schedule = await resolveEffectiveSchedule(manager, resource.id, date);
     if (!schedule) {
       throw new BadRequestException('El recurso no atiende ese día.');
@@ -1536,9 +1466,7 @@ export class ReservationsService {
     return expiredIds.length;
   }
 
-  // POL-2: recuerda a la administración las boletas en revisión que superaron su
-  // validation_window_minutes. Una sola vez por reserva (review_reminded_at), así
-  // el cron no reenvía el aviso cada 5 min.
+  // recuerda a la administración las boletas en revisión que superaron su validation_window_minutes. 
   private async remindPendingReviews(): Promise<number> {
     const rows: { id: string }[] = await this.dataSource.query(`
       UPDATE "reservations" r
@@ -1567,8 +1495,7 @@ export class ReservationsService {
     return rows.length;
   }
 
-  // B7: línea de tiempo de cambios de estado de una reserva (reservation_logs).
-  // El ciudadano solo ve su propia reserva; admin/operador, las de sus sedes.
+  // línea de tiempo de cambios de estado de una reserva (reservation_logs).
   async getHistory(id: string, user: AuthUser) {
     const reservation = await this.reservationRepository.findOne({
       where: { id },

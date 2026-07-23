@@ -18,7 +18,7 @@ export class ResourceStatusesService {
     private readonly repo: Repository<ResourceStatusEntity>,
 
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   // Lista para el desplegable (solo activos) o todos (gestión).
   async findAll(includeInactive = false) {
@@ -36,15 +36,12 @@ export class ResourceStatusesService {
     return status;
   }
 
-  // Resuelve un estado por su key. Tolerante (devuelve null si no existe): lo usa
-  // la disponibilidad y el chequeo de bloqueo, donde un estado inactivo aún debe
-  // resolverse por historial (un recurso puede seguir referenciándolo).
+  // Resuelve un estado por su key
   async findByKeyOrNull(key: string): Promise<ResourceStatusEntity | null> {
     return this.repo.findOne({ where: { key } });
   }
 
-  // Valida que un estado exista y esté activo para ASIGNARLO a un recurso
-  // (updateStatus del recurso). Estricto: un estado inactivo no se puede elegir.
+  // Valida que un estado exista y esté activo para ASIGNARLO a un recurs (updateStatus del recurso). Estricto: un estado inactivo no se puede elegir.
   async findActiveByKey(key: string): Promise<ResourceStatusEntity> {
     const status = await this.repo.findOne({ where: { key } });
     if (!status) {
@@ -69,7 +66,6 @@ export class ResourceStatusesService {
     }
 
     // is_default / visible_in_catalog no se exponen: un estado creado por el admin
-    // nunca es el default (ese es 'available', sembrado) y es visible por defecto.
     const status = this.repo.create({
       key: dto.key,
       label: dto.label,
@@ -125,8 +121,7 @@ export class ResourceStatusesService {
   async toggleActive(id: string, user: AuthUser, ipAddress?: string) {
     const status = await this.findOne(id);
 
-    // El estado default ('available') no se puede desactivar: es el que reciben
-    // los recursos nuevos y al que se vuelve para reabrir un recurso.
+    // El estado default ('available') no se puede desactivar
     if (status.isActive && status.isDefault) {
       throw new BadRequestException(
         'No se puede desactivar el estado predeterminado.',

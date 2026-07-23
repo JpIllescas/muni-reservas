@@ -52,21 +52,21 @@ export class UpdateResourceDto {
   @Max(72)
   paymentWindowHours?: number;
 
-  // CR-4: horas para la 1ª confirmación antes de que expire pending_confirmation.
+  // horas para la 1ª confirmación antes de que expire pending_confirmation.
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(168)
   confirmationWindowHours?: number;
 
-  // POL-2: minutos para validar la boleta antes de recordar a la administración.
+  // minutos para validar la boleta antes de recordar a la administración.
   @IsOptional()
   @IsInt()
   @Min(5)
   @Max(1440)
   validationWindowMinutes?: number;
 
-  // FLO-1: ¿exige boleta para aprobar? false = confirmación por llamada.
+  // ¿exige boleta para aprobar? false = confirmación por llamada.
   @IsOptional()
   @IsBoolean()
   requiresVoucher?: boolean;

@@ -1,10 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-// CR-1: fotos del DPI del usuario (frente y reverso), caso "no vecino
-// antigüeño". Rutas del filesystem; el archivo vive en UPLOAD_PATH/dpi (PII,
-// fuera de git, igual que las boletas).
-//
-// Escrita a mano (NO migration:generate) para no re-DROPear el backstop.
+// fotos del DPI del usuario (frente y reverso)
 export class AddUserDpiImages1783901000000 implements MigrationInterface {
   name = 'AddUserDpiImages1783901000000';
 
