@@ -21,6 +21,8 @@ import { AuditLog } from './modules/audit/entities/audit-log.entity';
 import { ResourceException } from './modules/resources/entities/resource-exception.entity';
 import { ResourceScheduleOverride } from './modules/resources/entities/resource-schedule-override.entity';
 import { Notification } from './modules/notifications/entities/notification.entity';
+import { RejectionReason } from './modules/rejection-reasons/entities/rejection-reason.entity';
+import { ResourceStatusEntity } from './modules/resource-statuses/entities/resource-status.entity';
 
 //Modulos
 import { AuthModule } from './modules/auth/auth.module';
@@ -31,6 +33,8 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { HealthModule } from './modules/health/health.module';
 import { SedesModule } from './modules/sedes/sedes.module';
+import { RejectionReasonsModule } from './modules/rejection-reasons/rejection-reasons.module';
+import { ResourceStatusesModule } from './modules/resource-statuses/resource-statuses.module';
 
 @Module({
   imports: [
@@ -77,6 +81,8 @@ import { SedesModule } from './modules/sedes/sedes.module';
             Payment,
             AuditLog,
             Notification,
+            RejectionReason,
+            ResourceStatusEntity,
           ],
           // SIEMPRE false, también en dev: se comprobó (2026-07-13) que
           // synchronize BORRA los backstops anti-doble-reserva en cada boot
@@ -109,6 +115,8 @@ import { SedesModule } from './modules/sedes/sedes.module';
     AuditModule,
     HealthModule,
     SedesModule,
+    RejectionReasonsModule,
+    ResourceStatusesModule,
   ],
   providers: [
     {

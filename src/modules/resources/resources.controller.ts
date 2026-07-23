@@ -67,11 +67,7 @@ export class ResourcesController {
     @Param('id') id: string,
     @Query() query: AvailabilityRangeQueryDto,
   ) {
-    return this.resourcesService.getAvailabilityRange(
-      id,
-      query.from,
-      query.to,
-    );
+    return this.resourcesService.getAvailabilityRange(id, query.from, query.to);
   }
 
   // POST /api/resources — solo admin

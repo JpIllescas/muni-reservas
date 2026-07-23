@@ -23,13 +23,14 @@ import {
   NON_CANCELLABLE_RESERVATION_STATUSES,
 } from '../../common/enums/reservation-status.enum';
 import { ResourceType } from '../../common/enums/resource-type.enum';
-import { ResourceStatus } from '../../common/enums/resource-status.enum';
+import { ResourceStatusEntity } from '../resource-statuses/entities/resource-status.entity';
 import { PaymentMethod } from '../../common/enums/payment-method.enum';
 import { PaymentStatus } from '../../common/enums/payment-status.enum';
 import { Role } from '../../common/enums/role.enum';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../audit/audit.service';
+import { RejectionReasonsService } from '../rejection-reasons/rejection-reasons.service';
 import { ResourceException } from '../resources/entities/resource-exception.entity';
 import {
   guatemalaNow,
@@ -89,6 +90,8 @@ export class ReservationsService {
 
     private readonly notificationsService: NotificationsService,
 
+    private readonly rejectionReasonsService: RejectionReasonsService,
+
     private readonly dataSource: DataSource,
   ) {}
 
@@ -144,13 +147,18 @@ export class ReservationsService {
         assertSedeAccess(actor, resource.sedeId);
       }
 
-      // REC-2: el recurso puede estar activo pero en mantenimiento/evento. El
-      // fetch filtra por isActive (no por status), así que se chequea aquí.
-      if (resource.status !== ResourceStatus.AVAILABLE) {
+      // REC-2: el recurso puede estar activo pero en un estado que bloquea
+      // reservas (mantenimiento/evento/…). El fetch filtra por isActive, no por
+      // status; el bloqueo cuelga del flag del catálogo, no del nombre. Se carga
+      // por separado (sin JOIN) para no romper el bloqueo pesimista de arriba.
+      const statusRow = await manager.findOne(ResourceStatusEntity, {
+        where: { key: resource.status },
+      });
+      if (statusRow?.blocksReservations) {
         throw new BadRequestException(
           resource.statusReason
             ? `El recurso no está disponible: ${resource.statusReason}.`
-            : `El recurso está en ${resource.status} y no admite reservas.`,
+            : `El recurso está en "${statusRow.label}" y no admite reservas.`,
         );
       }
 
@@ -498,6 +506,31 @@ export class ReservationsService {
     ipAddress?: string,
   ) {
     const changedById = user.id;
+
+    // Rechazo: resolver el texto que verá el ciudadano y el motivo del catálogo
+    // ANTES de mutar. Se acepta un motivo del catálogo (rejectionReasonId), texto
+    // libre (reason), o ambos (el texto libre queda como nota). Al menos uno.
+    let rejectionText: string | null = null;
+    let rejectionReasonId: string | null = null;
+    if (dto.status === ReservationStatus.REJECTED) {
+      const note = dto.reason?.trim();
+      if (dto.rejectionReasonId) {
+        const reason = await this.rejectionReasonsService.resolveForRejection(
+          dto.rejectionReasonId,
+        );
+        rejectionReasonId = reason.id;
+        rejectionText = note
+          ? `${reason.messageCitizen} (${note})`
+          : reason.messageCitizen;
+      } else if (note) {
+        rejectionText = note;
+      } else {
+        throw new BadRequestException(
+          'Indica un motivo de rechazo (elige uno del catálogo o escríbelo).',
+        );
+      }
+    }
+
     const { reservation, fromStatus } = await this.dataSource.transaction(
       async (manager) => {
         const found = await manager.findOne(Reservation, {
@@ -591,7 +624,8 @@ export class ReservationsService {
           found.confirmedAt = new Date();
         }
         if (dto.status === ReservationStatus.REJECTED) {
-          found.rejectionReason = dto.reason;
+          found.rejectionReason = rejectionText;
+          found.rejectionReasonId = rejectionReasonId;
         }
         // CR-4: primera confirmación (aceptar). La ventana de pago arranca
         // AQUÍ, no al crear: así el plazo no se quema esperando al admin.
@@ -614,7 +648,7 @@ export class ReservationsService {
         log.fromStatus = fromStatus;
         log.toStatus = dto.status;
         log.changedById = changedById;
-        log.reason = dto.reason ?? null;
+        log.reason = rejectionText ?? dto.reason ?? null;
         await manager.save(log);
 
         const reservation = await manager.findOne(Reservation, {
@@ -644,7 +678,7 @@ export class ReservationsService {
         reservation.user,
         reservation,
         dto.status,
-        dto.reason,
+        rejectionText ?? dto.reason,
       );
     }
 
@@ -801,11 +835,12 @@ export class ReservationsService {
           assertSedeAccess(user, resource.sedeId);
         }
 
-        // El recurso debe poder recibir reservas (activo y disponible).
-        if (
-          !resource.isActive ||
-          resource.status !== ResourceStatus.AVAILABLE
-        ) {
+        // El recurso debe poder recibir reservas (activo y en un estado que no
+        // bloquea, según el catálogo).
+        const statusRow = await manager.findOne(ResourceStatusEntity, {
+          where: { key: resource.status },
+        });
+        if (!resource.isActive || statusRow?.blocksReservations) {
           throw new BadRequestException(
             'El recurso no está disponible; no se puede revertir la reserva.',
           );
@@ -1109,10 +1144,10 @@ export class ReservationsService {
         if (!resource) {
           throw new NotFoundException('Recurso no encontrado.');
         }
-        if (
-          !resource.isActive ||
-          resource.status !== ResourceStatus.AVAILABLE
-        ) {
+        const statusRow = await manager.findOne(ResourceStatusEntity, {
+          where: { key: resource.status },
+        });
+        if (!resource.isActive || statusRow?.blocksReservations) {
           throw new BadRequestException(
             'El recurso no está disponible; no se puede aceptar la reasignación.',
           );

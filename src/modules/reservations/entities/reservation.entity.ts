@@ -86,6 +86,11 @@ export class Reservation {
   @Column({ name: 'rejection_reason', nullable: true, type: 'text' })
   rejectionReason: string | null;
 
+  // Motivo del catálogo elegido al rechazar (para reportes por motivo). null si
+  // el rechazo usó texto libre. El texto mostrado vive en rejectionReason.
+  @Column({ name: 'rejection_reason_id', type: 'uuid', nullable: true })
+  rejectionReasonId: string | null;
+
   // RES-2: datos de contacto del ENCARGADO de la reserva (a quién llamar/confirmar
   // el día del evento; puede no ser el titular de la cuenta). Obligatorios en el DTO
   // de creación; nullable en BD para no romper las reservas previas a RES-2.

@@ -9,7 +9,6 @@ import {
   Index,
 } from 'typeorm';
 import { ResourceType } from '../../../common/enums/resource-type.enum';
-import { ResourceStatus } from '../../../common/enums/resource-status.enum';
 import { Sede } from './sede.entity';
 
 @Entity('resources')
@@ -96,15 +95,13 @@ export class Resource {
   @Column({ name: 'validation_window_minutes', type: 'int', default: 60 })
   validationWindowMinutes: number;
 
-  // REC-2: estado operativo (mantenimiento / evento). NOT NULL default available.
-  // Separado de isActive: un recurso en mantenimiento sigue activo y visible en el
-  // catálogo (etiquetado), pero no admite reservas nuevas.
-  @Column({
-    type: 'enum',
-    enum: ResourceStatus,
-    default: ResourceStatus.AVAILABLE,
-  })
-  status: ResourceStatus;
+  // REC-2: estado operativo (catálogo resource_statuses). Guarda la `key` del
+  // estado (FK -> resource_statuses.key). NOT NULL default 'available'. Separado
+  // de isActive: un recurso en mantenimiento sigue activo pero no admite reservas.
+  // Se resuelve por separado (no hay relación TypeORM) para no forzar un JOIN
+  // bajo el bloqueo pesimista de create/revert/reassign.
+  @Column({ type: 'varchar', default: 'available' })
+  status: string;
 
   // Motivo del estado (ej. "Cancha cerrada por torneo X"). null cuando está
   // available. Se muestra al ciudadano en la disponibilidad.
