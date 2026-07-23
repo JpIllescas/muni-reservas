@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
 import { Reservation } from '../reservations/entities/reservation.entity';
 import { Resource } from '../resources/entities/resource.entity';
+import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 
 @Injectable()
 export class ReportsService {
@@ -12,16 +13,40 @@ export class ReportsService {
 
     @InjectRepository(Resource)
     private readonly resourceRepository: Repository<Resource>,
-  ) {}
+  ) { }
 
-  // 1. Reporte: Cantidad de reservas agrupadas por su estado ( Aprobado, Pendiente, etc.)
-  async getReservationsByStatus() {
-    const result = await this.reservationRepository
+  // Acota un query de reservas a las sedes del actor.
+  private applySedeScope(
+    qb: SelectQueryBuilder<Reservation>,
+    user: AuthUser,
+    resourceAlias: string,
+  ): boolean {
+    if (user.isSuperAdmin) {
+      return true;
+    }
+    if (user.sedeIds.length === 0) {
+      return false;
+    }
+    qb.andWhere(`${resourceAlias}.sedeId IN (:...sedeIds)`, {
+      sedeIds: user.sedeIds,
+    });
+    return true;
+  }
+
+  // 1. Reporte: Cantidad de reservas agrupadas por su estado.
+  async getReservationsByStatus(user: AuthUser) {
+    const query = this.reservationRepository
       .createQueryBuilder('reservation')
+      .innerJoin('reservation.resource', 'resource')
       .select('reservation.status', 'status')
       .addSelect('COUNT(reservation.id)', 'count')
-      .groupBy('reservation.status')
-      .getRawMany();
+      .groupBy('reservation.status');
+
+    if (!this.applySedeScope(query, user, 'resource')) {
+      return [];
+    }
+
+    const result = await query.getRawMany<{ status: string; count: string }>();
 
     // Convertir el string 'count' que devuelve postgres a un numero real
     return result.map((item) => ({
@@ -31,8 +56,8 @@ export class ReportsService {
   }
 
   // 2. Reporte: top de recursos (Canchas/Ranchos) con más reservas
-  async getPopularResource() {
-    const result = await this.reservationRepository
+  async getPopularResource(user: AuthUser) {
+    const query = this.reservationRepository
       .createQueryBuilder('reservation')
       .innerJoinAndSelect('reservation.resource', 'resource')
       .select('resource.name', 'resourceName')
@@ -40,8 +65,17 @@ export class ReportsService {
       .addSelect('COUNT(reservation.id)', 'reservationCount')
       .groupBy('resource.id')
       .orderBy('COUNT(reservation.id)', 'DESC')
-      .limit(5) // Solo mostrar el top 5
-      .getRawMany();
+      .limit(5); // Solo mostrar el top 5
+
+    if (!this.applySedeScope(query, user, 'resource')) {
+      return [];
+    }
+
+    const result = await query.getRawMany<{
+      resourceName: string;
+      resourceType: string;
+      reservationCount: string;
+    }>();
 
     return result.map((item) => ({
       resourceName: item.resourceName,

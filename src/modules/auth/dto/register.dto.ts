@@ -3,8 +3,10 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   MinLength,
 } from 'class-validator';
+import { IsDPI } from '../../../common/validators/is-dpi.validator';
 
 export class RegisterDto {
   @IsNotEmpty()
@@ -14,11 +16,23 @@ export class RegisterDto {
   @IsEmail()
   email: string;
 
-  @IsOptional()
   @IsString()
-  dpi: string;
+  @MinLength(8)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/, {
+    message:
+      'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula y un número.',
+  })
+  password: string;
 
   @IsOptional()
   @IsString()
+  @IsDPI()
+  dpi: string;
+
+  @IsNotEmpty()
+  @IsString()
+  @Matches(/^\d{8}$/, {
+    message: 'El teléfono debe tener exactamente 8 dígitos.',
+  })
   phone: string;
 }

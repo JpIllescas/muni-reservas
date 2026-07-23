@@ -7,31 +7,48 @@ import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { Payment } from './entities/payment.entity';
 import { Reservation } from '../reservations/entities/reservation.entity';
-import { ReservationLog } from '../reservations/entities/reservation-log.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Payment, Reservation, ReservationLog]),
+    // ReservationLog se escribe vía el manager de la transacción (conexión global).
+    TypeOrmModule.forFeature([Payment, Reservation]),
+
+    // aviso a admins cuando una boleta deja la reserva en revisión.
+    NotificationsModule,
 
     // Configuracion de Multer para guardar las boletas en la carpeta definida en .env
     MulterModule.registerAsync({
-      useFactory: () => ({
-        storage: diskStorage({
-          destination: process.env.UPLOAD_PATH || './uploads',
-          filename: (req, file, cb) => {
-            // Generar un nombre único: timestamp-ranodm.extension
-            const uniqueSuffix =
-              Date.now() + '-' + Math.round(Math.random() * 1e9);
-            cb(null, `${uniqueSuffix}${extname(file.originalname)}`);
+      useFactory: () => {
+        const maxSizeBytes =
+          parseInt(process.env.MAX_FILE_SIZE_MB || '5', 10) * 1024 * 1024;
+
+        return {
+          storage: diskStorage({
+            destination: process.env.UPLOAD_PATH || './uploads',
+            filename: (req, file, cb) => {
+              const uniqueSuffix =
+                Date.now() + '-' + Math.round(Math.random() * 1e9);
+              cb(null, `${uniqueSuffix}${extname(file.originalname)}`);
+            },
+          }),
+          fileFilter: (req, file, cb) => {
+            if (!file.mimetype.match(/\/(jpg|jpeg|png|pdf)$/)) {
+              return cb(
+                new BadRequestException(
+                  'Solo se permiten imágenes (JPG/PNG) o PDFs',
+                ),
+                false,
+              );
+            }
+            cb(null, true);
           },
-        }),
-        fileFilter: (req, file, cb) => {
-          if (!file.mimetype.match(/\/(jpg|jpeg|png|pdf)$/)) {
-            return cb(new BadRequestException('Solo se permiten imágenes (JPG/PNG) o PDFs'), false);
-          }
-          cb(null, true);
-        },
-      }),
+          limits: {
+            fileSize: maxSizeBytes,
+            files: 1,
+          },
+        };
+      },
     }),
   ],
   controllers: [PaymentsController],

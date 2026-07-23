@@ -5,6 +5,14 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET no está definido en las variables de entorno.');
+  }
+  return secret;
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(
@@ -14,13 +22,16 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET ?? 'fallback_secret',
+      secretOrKey: getJwtSecret(),
     });
   }
 
-  async validate(payload: any) {
+  // Forma del payload que firma AuthService (sub = id del usuario).
+  async validate(payload: { sub: string }) {
+    // Se cargan las sedes del actor para acotar el alcance admin/operador.
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
+      relations: ['sedes'],
     });
 
     if (!user || !user.isActive) {
@@ -32,6 +43,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       email: user.email,
       role: user.role,
       fullName: user.fullName,
+      isSuperAdmin: user.isSuperAdmin,
+      sedeIds: (user.sedes ?? []).map((s) => s.id),
     };
   }
 }

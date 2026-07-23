@@ -7,6 +7,7 @@
 /CONTEXT.md
 /skills-lock.json
 /.agents
+/*.md
 
 # Logs
 logs
@@ -50,6 +51,9 @@ lerna-debug.log*
 # temp directory
 .temp
 .tmp
+
+# Uploads (boletas de pago de ciudadanos - PII, NUNCA al repo)
+/uploads
 
 # Runtime data
 pids

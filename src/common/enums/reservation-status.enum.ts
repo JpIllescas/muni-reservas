@@ -5,4 +5,19 @@ export enum ReservationStatus {
   REJECTED = 'rejected',
   EXPIRED = 'expired',
   CANCELLED = 'cancelled',
+  // cancha con boleta recién creada, esperando la primera confirmación.
+  PENDING_CONFIRMATION = 'pending_confirmation',
 }
+
+// Estados "muertos": la reserva ya no ocupa el recurso.
+export const INACTIVE_RESERVATION_STATUSES: ReservationStatus[] = [
+  ReservationStatus.CANCELLED,
+  ReservationStatus.EXPIRED,
+  ReservationStatus.REJECTED,
+];
+
+// Estados desde los que el ciudadano NO puede cancelar.
+export const NON_CANCELLABLE_RESERVATION_STATUSES: ReservationStatus[] = [
+  ReservationStatus.APPROVED,
+  ...INACTIVE_RESERVATION_STATUSES,
+];

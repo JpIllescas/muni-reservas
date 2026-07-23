@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Propuesta de cambio de horario</title>
+  <style>
+    body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px; }
+    .container { max-width: 600px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    .header { text-align: center; border-bottom: 2px solid #0056b3; padding-bottom: 20px; margin-bottom: 20px; }
+    .title { color: #0056b3; font-size: 24px; margin: 0; }
+    .content { color: #333333; font-size: 16px; line-height: 1.5; }
+    .status-box { background-color: #f8f9fa; border-left: 4px solid #0056b3; padding: 15px; margin: 20px 0; }
+    .proposed-box { background-color: #f0f7ff; border-left: 4px solid #28a745; padding: 15px; margin: 20px 0; }
+    .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #777777; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 class="title">Municipalidad de La Antigua Guatemala</h1>
+    </div>
+    <div class="content">
+      <p>Hola, <strong>{{fullName}}</strong>.</p>
+      <p>Por un imprevisto, la administración te propone <strong>cambiar el horario</strong> de tu reserva. Tu reserva actual <strong>no cambia</strong> hasta que tú aceptes la propuesta.</p>
+
+      <div class="status-box">
+        <p><strong>Tu reserva actual:</strong></p>
+        <p>Recurso: {{resourceName}}</p>
+        <p>Fecha: {{currentDate}}</p>
+        {{#if currentTime}}
+          <p>Horario: {{currentTime}}</p>
+        {{/if}}
+      </div>
+
+      <div class="proposed-box">
+        <p><strong>Nuevo horario propuesto:</strong></p>
+        <p>Fecha: {{proposedDate}}</p>
+        {{#if proposedTime}}
+          <p>Horario: {{proposedTime}}</p>
+        {{/if}}
+        {{#if reason}}
+          <p>Motivo: {{reason}}</p>
+        {{/if}}
+      </div>
+
+      <p>Ingresa al sistema de reservas para <strong>aceptar o rechazar</strong> la propuesta. Si la rechazas, tu reserva se mantiene tal como está.</p>
+    </div>
+    <div class="footer">
+      <p>© {{year}} Municipalidad de La Antigua Guatemala. Todos los derechos reservados.</p>
+    </div>
+  </div>
+</body>
+</html>

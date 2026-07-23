@@ -1,23 +1,38 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import helmet from 'helmet';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Validación global — activa los decoradores de class-validator en todos los DTOs
+  // 2. Escudo de seguridad HTTP
+  app.use(helmet());
+
+  app.useGlobalFilters(new AllExceptionsFilter());
+
+  app.setGlobalPrefix('api');
+
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true, // Elimina campos que no están en el DTO
-      forbidNonWhitelisted: true, // Lanza error si llegan campos no permitidos
-      transform: true, // Convierte los tipos automáticamente
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
     }),
   );
 
-  // Prefijo global para todas las rutas — todas empiezan con /api
-  app.setGlobalPrefix('api');
+  app.enableCors({
+    // 3. URL del frontend desde variables de entorno
+    origin: process.env.FRONTEND_URL || 'http://localhost:4200',
+    methods: 'GET,HEAD,PATCH,POST,DELETE',
+    credentials: true,
+  });
 
-  await app.listen(3000);
-  console.log('Servidor corriendo en http://localhost:3000/api');
+  // Cierre ordenado: ante SIGTERM/SIGINT cierra conexiones de BD, crons, etc.
+  app.enableShutdownHooks();
+
+  // 4. Escuchamos en el puerto que asigne AWS, o 3000 por defecto
+  await app.listen(process.env.PORT || 3000);
 }
-bootstrap();
+void bootstrap();

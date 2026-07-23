@@ -19,13 +19,17 @@ import { NotificationsModule } from '../notifications/notifications.module';
     TypeOrmModule.forFeature([User, OtpCode]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => {
+      useFactory: (configService: ConfigService) => {
         const secret = configService.get<string>('JWT_SECRET');
+        // JWT_EXPIRES_IN admite "7d"/"24h" o un número en SEGUNDOS ("604800").
+        // ("604800" ≈ 10 min), por eso se convierte a number (= segundos).
+        const rawExpiry = configService.get<string>('JWT_EXPIRES_IN')!;
+        const expiresIn = /^\d+$/.test(rawExpiry)
+          ? Number(rawExpiry)
+          : (rawExpiry as import('ms').StringValue);
         return {
           secret,
-          signOptions: {
-            expiresIn: 604800,
-          },
+          signOptions: { expiresIn },
         };
       },
       inject: [ConfigService],
@@ -35,4 +39,4 @@ import { NotificationsModule } from '../notifications/notifications.module';
   providers: [AuthService, JwtStrategy],
   exports: [AuthService, JwtModule],
 })
-export class AuthModule {}
+export class AuthModule { }
